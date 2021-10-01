@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-if os.system('make eden') != 0:
+if os.system('make eden CC=gcc') != 0:
     exit()
 
 if os.system('bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml') != 0:
