@@ -1,2 +1,7 @@
 #Ignore test results, no matter where they are
 *test_results
+Cell_type_0_code.gen.c
+Cell_type_0_code.gen.so
+Cell_type_1_code.gen.c
+Cell_type_1_code.gen.so
+results1.txt
