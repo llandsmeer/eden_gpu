@@ -62,6 +62,7 @@ typedef long long * Table_I64;
 #include "EngineConfig.h"
 #include "SimulatorConfig.h"
 #include "GenerateModel.h"
+#include "StateBuffers.h"
 
 void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, Model & model, double & config_time_sec) {
 	timeval config_start, config_end;
@@ -286,141 +287,29 @@ int main(int argc, char **argv){
     // prepare engine for crunching
 
     printf("Allocating state buffers...\n");
-    // allocate at least two state vectors, to iterate in parallel
-    RawTables::Table_F32 state_one = tabs.global_initial_state; // eliminate redundancy LATER
-    RawTables::Table_F32 state_two(tabs.global_initial_state.size(), NAN);
 
-	auto	 		tables_state_f32_one = tabs.global_tables_state_f32_arrays;
-	decltype(		tables_state_f32_one )  			tables_state_f32_two;
-					tables_state_f32_two.reserve(		tables_state_f32_one.size());
-	for( auto tab : tables_state_f32_one )      		tables_state_f32_two.emplace_back( tab.size(), NAN );
-	
-	auto     		tables_state_i64_one = tabs.global_tables_state_i64_arrays;
-	decltype(		tables_state_i64_one)              	tables_state_i64_two;
-					tables_state_i64_two.reserve(      	tables_state_i64_one.size() );
-	for( auto tab : tables_state_i64_one )      		tables_state_i64_two.emplace_back( tab.size(), 0 );
-	// now things need to be done a little differently, since for example trigger(and lazy?) variables of Next ought to be zero for results to make sense
+    StateBuffers state(tabs);
 
-	float *global_state_now = &state_one[0];
-	float *global_state_next = &state_two[0];
-	
-	//also allocate pointer and size vectors, to use instead of silly std::vectors
-	auto GetSizePtrTables = []( auto &tablist, auto &pointers, auto &sizes ){
-		
-		pointers.resize( tablist.size() );
-		sizes.resize( tablist.size() );
-		for(size_t i = 0; i < tablist.size(); i++){
-			pointers[i] = tablist.at(i).data();
-			sizes[i] = (long long)tablist.at(i).size();
-		}
-	};
-	std::vector <long long> global_tables_const_f32_sizes; std::vector <Table_F32> global_tables_const_f32_arrays;
-	std::vector <long long> global_tables_const_i64_sizes; std::vector <Table_I64> global_tables_const_i64_arrays;
-	
-	std::vector <long long> global_tables_state_f32_sizes; std::vector <Table_F32> global_tables_stateOne_f32_arrays; std::vector <Table_F32> global_tables_stateTwo_f32_arrays;
-	std::vector <long long> global_tables_state_i64_sizes; std::vector <Table_I64> global_tables_stateOne_i64_arrays; std::vector <Table_I64> global_tables_stateTwo_i64_arrays;
-	
-	GetSizePtrTables(tabs.global_tables_const_f32_arrays, global_tables_const_f32_arrays, global_tables_const_f32_sizes);
-	GetSizePtrTables(tabs.global_tables_const_i64_arrays, global_tables_const_i64_arrays, global_tables_const_i64_sizes);
-	
-	GetSizePtrTables(tables_state_f32_one, global_tables_stateOne_f32_arrays, global_tables_state_f32_sizes);
-	GetSizePtrTables(tables_state_i64_one, global_tables_stateOne_i64_arrays, global_tables_state_i64_sizes);
-	GetSizePtrTables(tables_state_f32_two, global_tables_stateTwo_f32_arrays, global_tables_state_f32_sizes);
-	GetSizePtrTables(tables_state_i64_two, global_tables_stateTwo_i64_arrays, global_tables_state_i64_sizes);
-	
-	// also, set up the references to the flat vectors
-	global_tables_const_f32_arrays[tabs.global_const_tabref] = tabs.global_constants.data();
-	global_tables_const_f32_sizes [tabs.global_const_tabref] = tabs.global_constants.size();
-	
-	global_tables_stateOne_f32_arrays[tabs.global_state_tabref] = state_one.data();
-	global_tables_stateTwo_f32_arrays[tabs.global_state_tabref] = state_two.data();
-	global_tables_state_f32_sizes    [tabs.global_state_tabref] = state_one.size();
-	
-	Table_F32 *global_tables_stateNow_f32  = global_tables_stateOne_f32_arrays.data();
-	Table_I64 *global_tables_stateNow_i64  = global_tables_stateOne_i64_arrays.data();
-	Table_F32 *global_tables_stateNext_f32 = global_tables_stateTwo_f32_arrays.data();
-	Table_I64 *global_tables_stateNext_i64 = global_tables_stateTwo_i64_arrays.data();
-	
-	gettimeofday(&init_end, NULL);
-	metadata.init_time_sec = TimevalDeltaSec(init_start, init_end);
-	
-	if(config.dump_raw_layout){
-		
-		printf("Constants:\n");
-		for(auto val : tabs.global_constants ) printf("%g \t", val); 
-		printf("\n");
-		
-		printf("ConstIdx:\n");
-		for(auto val : tabs.global_const_f32_index ) printf("%lld \t", val);
-		printf("\n");
-		printf("StateIdx:\n");
-		for(auto val : tabs.global_state_f32_index ) printf("%lld \t", val);
-		printf("\n");
-		
-		auto PrintTables = [](const auto &index, const auto &arrays){
-			size_t next_tabchunk = 0;
-			for(size_t i = 0; i < arrays.size() ;i++){
-				
-				if(next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ){
-					printf("%zd", i);
-					while( next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ) next_tabchunk++;
-				}
-				printf(" \t");
-				printf(" %16p \t", arrays.at(i).data());
-				for(auto val : arrays.at(i) ) printf("%s \t", (presentable_string(val)).c_str());
-				printf("\n");
-			}
-		} ;
-		auto PrintRawTables = [](const auto &index, const auto &arrays, const auto &sizes){
-			size_t next_tabchunk = 0;
-			for(size_t i = 0; i < arrays.size() ;i++){
-				
-				if(next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ){
-					printf("%zd", i);
-					while( next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ) next_tabchunk++;
-				}
-				printf(" \t");
-				printf(" %16p \t", arrays.at(i));
-				for( std::size_t j = 0; j < (size_t)sizes.at(i); j++ ){
-					auto val = arrays.at(i)[j];
-					printf("%s \t", (presentable_string(val)).c_str());
-				}
-				printf("\n");
-			}
-		} ;
-		
-		
-		printf("TabConstF32: %zd %zd\n", tabs.global_table_const_f32_index.size(), tabs.global_tables_const_f32_arrays.size() );
-		PrintTables(tabs.global_table_const_f32_index, tabs.global_tables_const_f32_arrays);
-		printf("TabConstI64: %zd %zd\n", tabs.global_table_const_i64_index.size(), tabs.global_tables_const_i64_arrays.size() );
-		PrintTables(tabs.global_table_const_i64_index, tabs.global_tables_const_i64_arrays);
-		printf("TabStateF32: %zd %zd\n", tabs.global_table_state_f32_index.size(), tabs.global_tables_state_f32_arrays.size() );
-		PrintTables(tabs.global_table_state_f32_index, tabs.global_tables_state_f32_arrays);
-		printf("TabStateI64: %zd %zd\n", tabs.global_table_state_i64_index.size(), tabs.global_tables_state_i64_arrays.size() );
-		PrintTables(tabs.global_table_state_i64_index, tabs.global_tables_state_i64_arrays);
-		
-		printf("RawStateI64:\n");
-		PrintRawTables(tabs.global_table_state_i64_index, global_tables_stateOne_i64_arrays, global_tables_state_i64_sizes);
-		
-		printf("CallIdx:\n");
-		for(auto val : tabs.callbacks ) printf("%p \t", val);
-		printf("\n");
-		
-		
-		printf("Initial state:\n");
-		printf("TabStateOneF32:\n");
-		PrintTables(tabs.global_table_state_f32_index, tables_state_f32_one);
-		printf("TabStateOneI64:\n");
-		PrintTables(tabs.global_table_state_i64_index, tables_state_i64_one);
-		printf("TabStateTwoF32:\n");
-		PrintTables(tabs.global_table_state_f32_index, tables_state_f32_two);
-		printf("TabStateTwoI64:\n");
-		PrintTables(tabs.global_table_state_i64_index, tables_state_i64_two);
-		printf("Initial scalar state:\n");
-		for(auto val : tabs.global_initial_state ) printf("%g \t", val);
-		printf("\n");
-		
-	}
+    float *global_state_now = state.state_one.data();
+    float *global_state_next = state.state_two.data();
+    Table_F32 *global_tables_stateNow_f32  = state.global_tables_stateOne_f32_arrays.data();
+    Table_I64 *global_tables_stateNow_i64  = state.global_tables_stateOne_i64_arrays.data();
+    Table_F32 *global_tables_stateNext_f32 = state.global_tables_stateTwo_f32_arrays.data();
+    Table_I64 *global_tables_stateNext_i64 = state.global_tables_stateTwo_i64_arrays.data();
+
+    Table_F32 * global_tables_const_f32_arrays = state.global_tables_const_f32_arrays.data();
+    Table_I64 * global_tables_const_i64_arrays = state.global_tables_const_i64_arrays.data();
+    long long * global_tables_const_f32_sizes = state.global_tables_const_f32_sizes.data();
+    long long * global_tables_const_i64_sizes = state.global_tables_const_i64_sizes.data();
+    long long * global_tables_state_f32_sizes = state.global_tables_state_f32_sizes.data();
+    long long * global_tables_state_i64_sizes = state.global_tables_state_i64_sizes.data();
+
+    gettimeofday(&init_end, NULL);
+    metadata.init_time_sec = TimevalDeltaSec(init_start, init_end);
+
+    if(config.dump_raw_layout){
+        state.dump_raw_layout(tabs);
+    }
 	// MPI_Finalize();
 	// exit(1);
 	
@@ -637,10 +526,10 @@ int main(int argc, char **argv){
 			}
 			tabs.callbacks[item]( time, dt,
 				tabs.global_constants        .data(), tabs.global_const_f32_index      [item],
-				global_tables_const_f32_sizes.data(), global_tables_const_f32_arrays.data(), tabs.global_table_const_f32_index[item],
-				global_tables_const_i64_sizes.data(), global_tables_const_i64_arrays.data(), tabs.global_table_const_i64_index[item],
-				global_tables_state_f32_sizes.data(), global_tables_stateNow_f32, global_tables_stateNext_f32, tabs.global_table_state_f32_index[item],
-				global_tables_state_i64_sizes.data(), global_tables_stateNow_i64, global_tables_stateNext_i64, tabs.global_table_state_i64_index[item],
+				global_tables_const_f32_sizes, global_tables_const_f32_arrays,      tabs.global_table_const_f32_index[item],
+				global_tables_const_i64_sizes, global_tables_const_i64_arrays,      tabs.global_table_const_i64_index[item],
+				global_tables_state_f32_sizes, global_tables_stateNow_f32,          global_tables_stateNext_f32, tabs.global_table_state_f32_index[item],
+				global_tables_state_i64_sizes, global_tables_stateNow_i64,          global_tables_stateNext_i64, tabs.global_table_state_i64_index[item],
 				global_state_now, global_state_next , tabs.global_state_f32_index      [item],
 				step
 			);
@@ -732,7 +621,7 @@ int main(int argc, char **argv){
 		}
 		if(config.dump_raw_state_scalar){
 			// print state, separated by work item
-			for( size_t i = 0, itm = 1; i < state_one.size(); i++ ){
+			for( size_t i = 0, itm = 1; i < state.state_one.size(); i++ ){
 				printf("%g \t", global_state_next[i]);
 				while( itm < tabs.global_state_f32_index.size() && (i + 1) == (size_t)tabs.global_state_f32_index[itm] ){
 					printf("| ");
@@ -742,33 +631,7 @@ int main(int argc, char **argv){
 			printf("\n");
 		}
 		if(config.dump_raw_state_table){
-			
-			auto PrintVeryRawTables = [](const auto &index, const auto &arrays, const auto &sizes){
-				size_t next_tabchunk = 0;
-				for(size_t i = 0; i < sizes.size() ;i++){
-					
-					if(next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ){
-						printf("%zd", i);
-						while( next_tabchunk < index.size() && i == (size_t)index.at(next_tabchunk) ) next_tabchunk++;
-					}
-					printf(" \t");
-					printf(" %16p \t", arrays[i]);
-					for( std::size_t j = 0; j < (size_t)sizes.at(i); j++ ){
-						auto val = arrays[i][j];
-						printf("%s \t", (presentable_string(val)).c_str());
-					}
-					printf("\n");
-				}
-			} ;
-			
-			printf("RawStateF32:\n");
-			PrintVeryRawTables(tabs.global_table_state_f32_index, global_tables_stateNow_f32, global_tables_state_f32_sizes);
-			printf("RawStateI64:\n");
-			PrintVeryRawTables(tabs.global_table_state_i64_index, global_tables_stateNow_i64, global_tables_state_i64_sizes);
-			printf("RawStateNextF32:\n");
-			PrintVeryRawTables(tabs.global_table_state_f32_index, global_tables_stateNext_f32, global_tables_state_f32_sizes);
-			printf("RawStateNextI64:\n");
-			PrintVeryRawTables(tabs.global_table_state_i64_index, global_tables_stateNext_i64, global_tables_state_i64_sizes);
+            state.dump_raw_state_table(tabs);
 		}
 		
 		#ifdef USE_MPI
