@@ -63,60 +63,10 @@ typedef long long * Table_I64;
 #include "SimulatorConfig.h"
 #include "GenerateModel.h"
 
-int main(int argc, char **argv){
-	
-	#ifdef USE_MPI
-	// first of first of all, replace argc and argv
-	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
-	MPI_Init(&argc, &argv);
-	#endif
-	
-	// first of all, set stdout,stderr to Unbuffered, for live output
-	// this action must happen before any output is written !
-	setvbuf(stdout, NULL, _IONBF, 0);
-	setvbuf(stderr, NULL, _IONBF, 0);
-	
-	//sim parameters
-	SimulatorConfig config;
-	
-	//print logo ^_^
-	printf("--- Extensible Dynamics Engine for Networks ---\n");
-	#ifndef BUILD_STAMP
-	#define BUILD_STAMP __DATE__
-	#endif
-	printf("Build version " BUILD_STAMP "\n");
-	
-	#ifdef USE_MPI
-	// Get the number of processes
-    MPI_Comm_size(MPI_COMM_WORLD, &my_mpi.world_size);
-    // Get the rank of the process
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_mpi.rank);
-	
-	char processor_name[MPI_MAX_PROCESSOR_NAME];
-    int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
-	
-	
-	if( 1 || config.verbose){
-		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, my_mpi.rank, my_mpi.world_size);
-		
-		if( my_mpi.rank != 0 ){
-			char tmps[555];
-			sprintf(tmps, "log_node_%d.gen.txt", my_mpi.rank);
-			freopen(tmps,"w",stdout);
-			stderr = stdout;
-		}
-	}
-	
-	#endif
-	
-	RunMetaData metadata;
-	
-	Model model; // TODO move to SimulatorConfig
-	bool model_selected = false;
-	
+void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, Model & model, double & config_time_sec) {
 	timeval config_start, config_end;
 	gettimeofday(&config_start, NULL);
+	bool model_selected = false;
 	//-------------------> Read config options for run
 	for (int i = 1; i < argc; i++){
 		std::string arg(argv[i]);
@@ -225,34 +175,16 @@ int main(int argc, char **argv){
 			printf("cmdline: skipping unknown token \"%s\"\n", argv[i]);
 		}
 	}
-	gettimeofday(&config_end, NULL);
 	
 	// handle model missing
 	if(!model_selected){
 		printf("error: NeuroML model not selected (select one with nml <file> in command line)\n");
-		return 2;
+		exit(2);
 	}
-	
-	metadata.config_time_sec = TimevalDeltaSec(config_start, config_end);
-	
-	//-------------------> create data structures and code based on the model
-	timeval init_start, init_end;
-	gettimeofday(&init_start, NULL);
-	
-	printf("Initializing model...\n");
-	EngineConfig engine_config;
-	RawTables tabs;
-	if(!GenerateModel(model, config, engine_config, tabs)){
-		printf("NeuroML model could not be created\n");
-		exit(1);
-	}
-	
-	//-------------------> crunch the numbers
-	// set up printing in logfiles
-	const int column_width = 16;
-	char tmps_column[ column_width + 5 ];
-	FixedWidthNumberPrinter column_fmt(column_width, '\t', 0);
-	
+	gettimeofday(&config_end, NULL);
+	config_time_sec = TimevalDeltaSec(config_start, config_end);
+}
+std::vector<FILE *> open_trajectory_files(EngineConfig & engine_config) {
 	// open the logs, one for each logger
 	std::vector<FILE *> trajectory_open_files;
 	for(auto logger : engine_config.trajectory_loggers){
@@ -268,14 +200,85 @@ int main(int argc, char **argv){
 		}
 		trajectory_open_files.push_back(fout);
 	}
-	
-	// prepare engine for crunching
-	
-	printf("Allocating state buffers...\n");
-	// allocate at least two state vectors, to iterate in parallel
-	RawTables::Table_F32 state_one = tabs.global_initial_state; // eliminate redundancy LATER
-	RawTables::Table_F32 state_two(tabs.global_initial_state.size(), NAN);
-	
+    return trajectory_open_files;
+}
+
+void print_eden_cli_header() {
+	//print logo ^_^
+	printf("--- Extensible Dynamics Engine for Networks ---\n");
+	#ifndef BUILD_STAMP
+	#define BUILD_STAMP __DATE__
+	#endif
+	printf("Build version " BUILD_STAMP "\n");
+}
+
+void setup_mpi(int & argc, char ** & argv) {
+#ifdef USE_MPI
+	// first of first of all, replace argc and argv
+	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
+	MPI_Init(&argc, &argv);
+	// Get the number of processes
+    MPI_Comm_size(MPI_COMM_WORLD, &my_mpi.world_size);
+    // Get the rank of the process
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_mpi.rank);
+	char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
+
+	if( 1 || config.verbose){
+		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, my_mpi.rank, my_mpi.world_size);
+		
+		if( my_mpi.rank != 0 ){
+			char tmps[555];
+			sprintf(tmps, "log_node_%d.gen.txt", my_mpi.rank);
+			freopen(tmps,"w",stdout);
+			stderr = stdout;
+		}
+	}
+#endif
+}
+
+int main(int argc, char **argv){
+    SimulatorConfig config;
+    Model model; // TODO move to SimulatorConfig
+    RunMetaData metadata;
+    EngineConfig engine_config;
+    RawTables tabs;
+
+    // first of all, set stdout,stderr to Unbuffered, for live output
+    // this action must happen before any output is written !
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
+    print_eden_cli_header();
+    setup_mpi(argc, argv);
+    parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
+
+    //-------------------> create data structures and code based on the model
+    timeval init_start, init_end;
+    gettimeofday(&init_start, NULL);
+
+    printf("Initializing model...\n");
+    if(!GenerateModel(model, config, engine_config, tabs)){
+        printf("NeuroML model could not be created\n");
+        exit(1);
+    }
+
+    //-------------------> crunch the numbers
+    // set up printing in logfiles
+    const int column_width = 16;
+    char tmps_column[ column_width + 5 ];
+    FixedWidthNumberPrinter column_fmt(column_width, '\t', 0);
+
+    std::vector<FILE *> trajectory_open_files = open_trajectory_files(engine_config);
+
+    // prepare engine for crunching
+
+    printf("Allocating state buffers...\n");
+    // allocate at least two state vectors, to iterate in parallel
+    RawTables::Table_F32 state_one = tabs.global_initial_state; // eliminate redundancy LATER
+    RawTables::Table_F32 state_two(tabs.global_initial_state.size(), NAN);
+
 	auto	 		tables_state_f32_one = tabs.global_tables_state_f32_arrays;
 	decltype(		tables_state_f32_one )  			tables_state_f32_two;
 					tables_state_f32_two.reserve(		tables_state_f32_one.size());
@@ -286,7 +289,7 @@ int main(int argc, char **argv){
 					tables_state_i64_two.reserve(      	tables_state_i64_one.size() );
 	for( auto tab : tables_state_i64_one )      		tables_state_i64_two.emplace_back( tab.size(), 0 );
 	// now things need to be done a little differently, since for example trigger(and lazy?) variables of Next ought to be zero for results to make sense
-	
+
 	float *global_state_now = &state_one[0];
 	float *global_state_next = &state_two[0];
 	
