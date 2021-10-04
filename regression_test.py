@@ -12,7 +12,7 @@ out = pd.read_csv('results1.txt', sep=' +', header=None, engine='python')
 
 fail = False
 for i in range(4):
-    if not (ref[0].values == out[0].values).all():
+    if not (ref[i].values == out[i].values).all():
         print('REPRODUCTION ERROR!!')
         fail = True
 
