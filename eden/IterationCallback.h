@@ -1,3 +1,4 @@
+extern "C" {
 typedef void ( *IterationCallback)(
 	double time,
 	float dt,
