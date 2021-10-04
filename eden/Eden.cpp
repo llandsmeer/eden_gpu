@@ -67,6 +67,104 @@ typedef long long * Table_I64;
 #include "MpiBuffers.h"
 #include "TrajectoryLogger.h"
 
+struct AbstractBackend {
+    RawTables * tabs;
+    StateBuffers * state;
+    AbstractBackend(RawTables & tabs, StateBuffers & state) {
+        this->tabs = &tabs;
+        this->state = &state;
+    }
+    void init() {}
+    virtual float * global_state_now() const = 0;
+    virtual float * global_state_next() const = 0;
+    virtual Table_F32 * global_tables_stateNow_f32 () const = 0;
+    virtual Table_I64 * global_tables_stateNow_i64 () const = 0;
+    virtual Table_F32 * global_tables_stateNext_f32() const = 0;
+    virtual Table_I64 * global_tables_stateNext_i64() const = 0;
+    virtual Table_F32 * global_tables_const_f32_arrays() const = 0;
+    virtual Table_I64 * global_tables_const_i64_arrays() const = 0;
+    virtual long long * global_tables_const_f32_sizes() const = 0;
+    virtual long long * global_tables_const_i64_sizes() const = 0;
+    virtual long long * global_tables_state_f32_sizes() const = 0;
+    virtual long long * global_tables_state_i64_sizes() const = 0;
+    virtual void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, float time) = 0;
+};
+
+struct CpuBackend : AbstractBackend {
+    using AbstractBackend::AbstractBackend;
+    /* Pure CPU implementation just refers to existing state buffers */
+    float * global_state_now() const { return state->state_one.data(); }
+    float * global_state_next() const { return state->state_two.data(); }
+    Table_F32 * global_tables_stateNow_f32 () const { return state->global_tables_stateOne_f32_arrays.data(); }
+    Table_I64 * global_tables_stateNow_i64 () const { return state->global_tables_stateOne_i64_arrays.data(); }
+    Table_F32 * global_tables_stateNext_f32() const { return state->global_tables_stateTwo_f32_arrays.data(); }
+    Table_I64 * global_tables_stateNext_i64() const { return state->global_tables_stateTwo_i64_arrays.data(); }
+    Table_F32 * global_tables_const_f32_arrays() const { return state->global_tables_const_f32_arrays.data(); }
+    Table_I64 * global_tables_const_i64_arrays() const { return state->global_tables_const_i64_arrays.data(); }
+    long long * global_tables_const_f32_sizes() const { return state->global_tables_const_f32_sizes.data(); }
+    long long * global_tables_const_i64_sizes() const { return state->global_tables_const_i64_sizes.data(); }
+    long long * global_tables_state_f32_sizes() const { return state->global_tables_state_f32_sizes.data(); }
+    long long * global_tables_state_i64_sizes() const { return state->global_tables_state_i64_sizes.data(); }
+
+    void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, float time) {
+        //prepare for parallel iteration
+        const float dt = engine_config.dt;
+
+        // Execute all work items
+        #pragma omp parallel for schedule(runtime)
+        for( long long item = 0; item < engine_config.work_items; item++ ){
+            if(config.debug){
+                printf("item %lld start\n", item);
+                // if(my_mpi.rank != 0) continue;
+                // continue;
+                fflush(stdout);
+            }
+            tabs->callbacks[item]( time, dt,
+                tabs->global_constants.data(),      tabs->global_const_f32_index[item], global_tables_const_f32_sizes(),            global_tables_const_f32_arrays(),      tabs->global_table_const_f32_index[item],
+                global_tables_const_i64_sizes(),    global_tables_const_i64_arrays(),   tabs->global_table_const_i64_index[item],
+                global_tables_state_f32_sizes(),    global_tables_stateNow_f32(),       global_tables_stateNext_f32(),              tabs->global_table_state_f32_index[item],
+                global_tables_state_i64_sizes(),    global_tables_stateNow_i64(),       global_tables_stateNext_i64(),              tabs->global_table_state_i64_index[item],
+                global_state_now(),                 global_state_next(),                tabs->global_state_f32_index[item],
+                step
+            );
+            if(config.debug){
+                printf("item %lld end\n", item);
+                fflush(stdout);
+            }
+        }
+    }
+};
+
+struct GpuBackend : AbstractBackend {
+    using AbstractBackend::AbstractBackend;
+    void init () {
+    }
+    float * d_global_state_now = 0;
+    float * global_state_now() const { return d_global_state_now; }
+    float * d_global_state_next = 0;
+    float * global_state_next() const { return d_global_state_next; }
+    Table_F32 * d_global_tables_stateNow_f32  = 0;
+    Table_F32 * global_tables_stateNow_f32 () const { return d_global_tables_stateNow_f32; }
+    Table_I64 * d_global_tables_stateNow_i64  = 0;
+    Table_I64 * global_tables_stateNow_i64 () const { return d_global_tables_stateNow_i64; }
+    Table_F32 * d_global_tables_stateNext_f32 = 0;
+    Table_F32 * global_tables_stateNext_f32() const { return d_global_tables_stateNext_f32; }
+    Table_I64 * d_global_tables_stateNext_i64 = 0;
+    Table_I64 * global_tables_stateNext_i64() const { return d_global_tables_stateNext_i64; }
+    Table_F32 * d_global_tables_const_f32_arrays = 0;
+    Table_F32 * global_tables_const_f32_arrays() const { return d_global_tables_const_f32_arrays; }
+    Table_I64 * d_global_tables_const_i64_arrays = 0;
+    Table_I64 * global_tables_const_i64_arrays() const { return d_global_tables_const_i64_arrays; }
+    long long * d_global_tables_const_f32_sizes = 0;
+    long long * global_tables_const_f32_sizes() const { return d_global_tables_const_f32_sizes; }
+    long long * d_global_tables_const_i64_sizes = 0;
+    long long * global_tables_const_i64_sizes() const { return d_global_tables_const_i64_sizes; }
+    long long * d_global_tables_state_f32_sizes = 0;
+    long long * global_tables_state_f32_sizes() const { return d_global_tables_state_f32_sizes; }
+    long long * d_global_tables_state_i64_sizes = 0;
+    long long * global_tables_state_i64_sizes() const { return d_global_tables_state_i64_sizes; }
+};
+
 int main(int argc, char **argv){
     SimulatorConfig config;
     Model model; // TODO move to SimulatorConfig
@@ -107,19 +205,15 @@ int main(int argc, char **argv){
     // the GPU we either need to copy back to the vectors, use a custom allocator
     // or just raise a warning if we try to use dump_raw_state_table() or MPI in
     // combination with GPU, or replace the StateBuffer reference with this pointer list
+    // Also backends save a pointer to tabs & state, so descruct CpuBackend before tabs & state
+    CpuBackend backend(tabs, state);
+
     float *global_state_now = state.state_one.data();
     float *global_state_next = state.state_two.data();
     Table_F32 *global_tables_stateNow_f32  = state.global_tables_stateOne_f32_arrays.data();
     Table_I64 *global_tables_stateNow_i64  = state.global_tables_stateOne_i64_arrays.data();
     Table_F32 *global_tables_stateNext_f32 = state.global_tables_stateTwo_f32_arrays.data();
     Table_I64 *global_tables_stateNext_i64 = state.global_tables_stateTwo_i64_arrays.data();
-
-    Table_F32 * global_tables_const_f32_arrays = state.global_tables_const_f32_arrays.data();
-    Table_I64 * global_tables_const_i64_arrays = state.global_tables_const_i64_arrays.data();
-    long long * global_tables_const_f32_sizes = state.global_tables_const_f32_sizes.data();
-    long long * global_tables_const_i64_sizes = state.global_tables_const_i64_sizes.data();
-    long long * global_tables_state_f32_sizes = state.global_tables_state_f32_sizes.data();
-    long long * global_tables_state_i64_sizes = state.global_tables_state_i64_sizes.data();
 
     gettimeofday(&init_end, NULL);
     metadata.init_time_sec = TimevalDeltaSec(init_start, init_end);
@@ -151,31 +245,7 @@ int main(int argc, char **argv){
         mpi_buffers.init_communicate(engine_config, state, config);
         #endif
 
-        //prepare for parallel iteration
-        const float dt = engine_config.dt;
-
-        // Execute all work items
-        #pragma omp parallel for schedule(runtime)
-        for( long long item = 0; item < engine_config.work_items; item++ ){
-            if(config.debug){
-                printf("item %lld start\n", item);
-                // if(my_mpi.rank != 0) continue;
-                // continue;
-                fflush(stdout);
-            }
-            tabs.callbacks[item]( time, dt,
-                tabs.global_constants.data(),   tabs.global_const_f32_index      [item], global_tables_const_f32_sizes, global_tables_const_f32_arrays,      tabs.global_table_const_f32_index[item],
-                global_tables_const_i64_sizes,  global_tables_const_i64_arrays,      tabs.global_table_const_i64_index[item],
-                global_tables_state_f32_sizes,  global_tables_stateNow_f32,          global_tables_stateNext_f32, tabs.global_table_state_f32_index[item],
-                global_tables_state_i64_sizes,  global_tables_stateNow_i64,          global_tables_stateNext_i64, tabs.global_table_state_i64_index[item],
-                global_state_now, global_state_next , tabs.global_state_f32_index      [item],
-                step
-            );
-            if(config.debug){
-                printf("item %lld end\n", item);
-                fflush(stdout);
-            }
-        }
+        backend.execute_work_items(engine_config, config, step, time);
 
         if( !initializing ){
             // output what needs to be output
