@@ -68,13 +68,24 @@ typedef long long * Table_I64;
 #include "print_eden_cli_header.h"
 #include "print_runtime_usage.h"
 
+struct Timer {
+    timeval start;
+    Timer() {
+        gettimeofday(&start, 0);
+    }
+    double delta() {
+        timeval end;
+        gettimeofday(&end, 0);
+        return TimevalDeltaSec(start, end);
+    }
+};
+
 int main(int argc, char **argv){
     SimulatorConfig config;
     Model model;
     RunMetaData metadata;
     EngineConfig engine_config;
     RawTables tabs;
-
     setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
     setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
     print_eden_cli_header();
@@ -82,8 +93,7 @@ int main(int argc, char **argv){
     parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
 
     printf("Initializing model...\n");
-    timeval init_start, init_end;
-    gettimeofday(&init_start, NULL);
+    Timer init_timer;
     if(!GenerateModel(model, config, engine_config, tabs)){
         printf("NeuroML model could not be created\n"); exit(1);
     }
@@ -93,54 +103,28 @@ int main(int argc, char **argv){
     StateBuffers state(tabs);
     CpuBackend backend(tabs, state);
     backend.init();
-    gettimeofday(&init_end, NULL);
-    metadata.init_time_sec = TimevalDeltaSec(init_start, init_end);
+    metadata.init_time_sec = init_timer.delta();
     if(config.dump_raw_layout) state.dump_raw_layout(tabs);
     MpiBuffers mpi_buffers(engine_config);
 
     printf("Starting simulation loop...\n");
-    timeval run_start, run_end;
-    gettimeofday(&run_start, NULL);
+    Timer run_timer;
     double time = engine_config.t_initial;
-
     // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
     for( long long step = -3; time <= engine_config.t_final; step++ ){
         bool initializing = step <= 0;
-        mpi_buffers.init_communicate(engine_config, state, config);
+        mpi_buffers.init_communicate(engine_config, state, config); // need to copy between backend & state when using mpi
         backend.execute_work_items(engine_config, config, step, time);
         if( !initializing ){
-            trajectory_logger.write_output_logs( engine_config, time, backend.global_state_now(), /* needed on mpi???: */backend.global_tables_stateNow_f32());
+            trajectory_logger.write_output_logs( engine_config, time,
+                    backend.global_state_now(), /* needed on mpi???: */backend.global_tables_stateNow_f32());
         }
-
-        if( config.dump_raw_state_scalar || config.dump_raw_state_table ){
-            if( !initializing ){
-                printf("State: t = %g %s\n", time, Scales<Time>::native.name);
-            } else {
-                printf("State: t = %g %s, initialization step %lld\n", time, Scales<Time>::native.name, step);
-            }
-        }
-        if( config.dump_raw_state_scalar ){
-            // print state, separated by work item
-            for( size_t i = 0, itm = 1; i < state.state_one.size(); i++ ){
-                printf("%g \t", backend.global_state_next()[i]);
-                while( itm < tabs.global_state_f32_index.size() && (i + 1) == (size_t)tabs.global_state_f32_index[itm] ){
-                    printf("| ");
-                    itm++;
-                }
-            }
-            printf("\n");
-        }
-        if( config.dump_raw_state_table ) state.dump_raw_state_table(tabs);
-
+        backend.dump_iteration(config, initializing, time, step);
         mpi_buffers.finish_communicate();
         if( !initializing ) time += engine_config.dt;
         backend.swap_buffers();
     }
 
-    gettimeofday(&run_end, NULL);
-    metadata.run_time_sec = TimevalDeltaSec(run_start, run_end);
-
+    metadata.run_time_sec = run_timer.delta();
     print_runtime_usage(metadata);
-
-    return 0;
 }

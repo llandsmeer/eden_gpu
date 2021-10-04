@@ -133,7 +133,7 @@ struct StateBuffers {
         printf("\n");
     }
 
-    void dump_raw_state_table(RawTables & tabs) {
+    void dump_raw_state_table(RawTables * tabs) {
         Table_F32 *global_tables_stateNow_f32  = global_tables_stateOne_f32_arrays.data();
         Table_I64 *global_tables_stateNow_i64  = global_tables_stateOne_i64_arrays.data();
         Table_F32 *global_tables_stateNext_f32 = global_tables_stateTwo_f32_arrays.data();
@@ -157,13 +157,13 @@ struct StateBuffers {
         } ;
 
         printf("RawStateF32:\n");
-        PrintVeryRawTables(tabs.global_table_state_f32_index, global_tables_stateNow_f32, global_tables_state_f32_sizes);
+        PrintVeryRawTables(tabs->global_table_state_f32_index, global_tables_stateNow_f32, global_tables_state_f32_sizes);
         printf("RawStateI64:\n");
-        PrintVeryRawTables(tabs.global_table_state_i64_index, global_tables_stateNow_i64, global_tables_state_i64_sizes);
+        PrintVeryRawTables(tabs->global_table_state_i64_index, global_tables_stateNow_i64, global_tables_state_i64_sizes);
         printf("RawStateNextF32:\n");
-        PrintVeryRawTables(tabs.global_table_state_f32_index, global_tables_stateNext_f32, global_tables_state_f32_sizes);
+        PrintVeryRawTables(tabs->global_table_state_f32_index, global_tables_stateNext_f32, global_tables_state_f32_sizes);
         printf("RawStateNextI64:\n");
-        PrintVeryRawTables(tabs.global_table_state_i64_index, global_tables_stateNext_i64, global_tables_state_i64_sizes);
+        PrintVeryRawTables(tabs->global_table_state_i64_index, global_tables_stateNext_i64, global_tables_state_i64_sizes);
     }
 };
 

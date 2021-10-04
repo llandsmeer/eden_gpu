@@ -85,11 +85,34 @@ struct CpuBackend : AbstractBackend {
     }
 
     void swap_buffers() {
-        return;
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
         std::swap(m_global_tables_stateNow_i64, m_global_tables_stateNext_i64);
     }
+
+
+    void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) {
+        if( config.dump_raw_state_scalar || config.dump_raw_state_table ){
+            if( !initializing ){
+                printf("State: t = %g %s\n", time, Scales<Time>::native.name);
+            } else {
+                printf("State: t = %g %s, initialization step %lld\n", time, Scales<Time>::native.name, step);
+            }
+        }
+        if( config.dump_raw_state_scalar ){
+            // print state, separated by work item
+            for( size_t i = 0, itm = 1; i < state->state_one.size(); i++ ){
+                printf("%g \t", global_state_next()[i]);
+                while( itm < tabs->global_state_f32_index.size() && (i + 1) == (size_t)tabs->global_state_f32_index[itm] ){
+                    printf("| ");
+                    itm++;
+                }
+            }
+            printf("\n");
+        }
+        if( config.dump_raw_state_table ) state->dump_raw_state_table(tabs);
+    }
+
 };
 
 struct GpuBackend : AbstractBackend {
@@ -128,7 +151,6 @@ struct GpuBackend : AbstractBackend {
     long long * d_global_tables_state_i64_sizes = 0;
     long long * global_tables_state_i64_sizes() const { return d_global_tables_state_i64_sizes; }
     void swap_buffers() {
-        return;
         std::swap(d_global_state_now, d_global_state_next);
         std::swap(d_global_tables_stateNow_f32, d_global_tables_stateNext_f32);
         std::swap(d_global_tables_stateNow_i64, d_global_tables_stateNext_i64);
