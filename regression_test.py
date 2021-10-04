@@ -1,10 +1,10 @@
 import pandas as pd
 import os
 
-if os.system('make eden CC=gcc') != 0:
+if os.system('make eden TOOLCHAIN=nvcc') != 0:
     exit()
 
-if os.system('bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml') != 0:
+if os.system('bin/eden.debug.nvcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml') != 0:
     exit()
 
 ref = pd.read_csv('LEMS_NML2_Ex25_MultiComp.txt', sep=' +', header=None, engine='python')
