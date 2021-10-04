@@ -62,23 +62,12 @@ typedef long long * Table_I64;
 #include "StateBuffers.h"
 #include "MpiBuffers.h"
 #include "TrajectoryLogger.h"
+#include "Timer.h"
 #include "backends.h"
 
 #include "parse_command_line_args.h"
 #include "print_eden_cli_header.h"
 #include "print_runtime_usage.h"
-
-struct Timer {
-    timeval start;
-    Timer() {
-        gettimeofday(&start, 0);
-    }
-    double delta() {
-        timeval end;
-        gettimeofday(&end, 0);
-        return TimevalDeltaSec(start, end);
-    }
-};
 
 int main(int argc, char **argv){
     SimulatorConfig config;
