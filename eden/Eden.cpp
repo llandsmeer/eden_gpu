@@ -30,6 +30,10 @@ Parallel simulation engine for ODE-based models
 
 #include "MMMallocator.h"
 
+#ifdef USE_GPU
+    #include "GPU_helpers.h"
+#endif
+
 #if defined (__linux__) || defined(__APPLE__)
 #include <dlfcn.h> // for dynamic loading
 #endif
@@ -69,6 +73,15 @@ typedef long long * Table_I64;
 #include "print_eden_cli_header.h"
 #include "print_runtime_usage.h"
 
+void setup_gpu(){
+    #ifdef USE_GPU
+    printf("hello from CPU compiled code\n");
+    test();
+    #else
+    printf("No GPU support");
+    #endif
+}
+
 int main(int argc, char **argv){
     SimulatorConfig config;
     Model model;
@@ -79,6 +92,8 @@ int main(int argc, char **argv){
     setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
     print_eden_cli_header();
     setup_mpi(argc, argv);
+    setup_gpu();
+
     parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
 
     printf("Initializing model...\n");
