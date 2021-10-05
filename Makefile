@@ -127,7 +127,7 @@ TOOLCHAIN_LIBS_PATH ?= /usr/local/
 
 # Compiler flags
 # TODO more optimization flags
-CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra}
+CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra} -fsanitize=address
 CFLAGS_release := ${CFLAGS_basic} -O3
 CFLAGS_debug := ${CFLAGS_basic} -g
 
@@ -261,6 +261,9 @@ ${BIN_DIR}/nml_projector${DOT_O}: ${TESTING_DIR}/nml_projector.cpp ${SRC_COMMON}
 		${SRC_PUGIXML}/pugixml.hpp ${SRC_PUGIXML}/pugiconfig.hpp
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
+run: eden
+	bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
+
 test:
 	make -f testing/docker/Makefile test
 
@@ -269,5 +272,5 @@ clean:
 	rm -f $(BIN_DIR)/*$(EXE_EXTENSION)
 	"find" $(TESTING_DIR)/sandbox/. ! -name 'README.txt' ! -name '.' -type d -exec rm -rf {} +
 
-.PHONY: all test clean ${TARGETS} ${MODULES} 
+.PHONY: all run test clean ${TARGETS} ${MODULES}
 .PHONY: toolchain
