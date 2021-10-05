@@ -17,7 +17,7 @@ for Toolchain in ["gcc","nvcc"]:
 
     fail = False
     for i in range(4):
-        if not (ref[0].values == out[0].values).all():
+        if not (ref[i].values == out[i].values).all():
             print('REPRODUCTION ERROR!!')
             fail = True
 
@@ -30,4 +30,3 @@ for Toolchain in ["gcc","nvcc"]:
 
     else:
         print('VALIDATION PASS: ' + Toolchain)
-
