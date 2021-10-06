@@ -17,19 +17,12 @@ Extensible Dynamics Engine for Networks
 Parallel simulation engine for ODE-based models
 */
 
-#include "Common.h"
-#include "NeuroML.h"
-
-#include <math.h>
-#include <limits.h>
-#include <errno.h>
-
-#include <map>
-#include <set>
+//standard libs
+#include <cmath>
 #include <chrono>
 
-#include "MMMallocator.h"
-
+//MPI and GPU options
+#include "mpi_setup.h"
 #ifdef USE_GPU
     #include "GPU_helpers.h"
 #endif
@@ -43,15 +36,12 @@ Parallel simulation engine for ODE-based models
 // #include <windows.h> // loaded through Common.h at the moment, TODO break out in Windows specific header
 #endif
 
-// do not specify alignment for the pointers, in the generic interface
-// cannot specify __restrict__ because it is quietly dropped by compilers ( ! ) when the type is allocated with new
-// causing a type mismatch when operator delete(T * __restrict__) is called (then why didn't they drop __restrict__ from there too ??)
-// just hope the type "mismatch" won't cause a crash in practice
-typedef float * Table_F32;
-typedef long long * Table_I64;
+// Local includes
+#include "Common.h"
+#include "NeuroML.h"
+#include "MMMallocator.h"
 
-#include "mpi_setup.h"
-
+// mess to clean up
 #include "IterationCallback.h"
 #include "AppendToVector.h"
 #include "string_helpers.h"
@@ -68,10 +58,9 @@ typedef long long * Table_I64;
 #include "TrajectoryLogger.h"
 #include "Timer.h"
 #include "backends.h"
-
 #include "parse_command_line_args.h"
 #include "print_eden_cli_header.h"
-#include "print_runtime_usage.h"
+
 
 void setup_gpu(){
     #ifdef USE_GPU
@@ -164,7 +153,6 @@ int main(int argc, char **argv){
         backend.swap_buffers();
     }
 
-    metadata.run_time_sec = run_timer.delta(); //make this part of the metadata class
-
-    print_runtime_usage(metadata); //make this part of the metadata class
+    metadata.run_time_sec = run_timer.delta();
+    metadata.print();
 }

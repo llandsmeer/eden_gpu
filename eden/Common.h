@@ -56,6 +56,13 @@
 #define pow10(powah) pow(10,(powah))
 #define stricmp strcasecmp
 
+// do not specify alignment for the pointers, in the generic interface
+// cannot specify __restrict__ because it is quietly dropped by compilers ( ! ) when the type is allocated with new
+// causing a type mismatch when operator delete(T * __restrict__) is called (then why didn't they drop __restrict__ from there too ??)
+// just hope the type "mismatch" won't cause a crash in practice
+typedef float * Table_F32;
+typedef long long * Table_I64;
+
 //------------------> OS-independent utilities
 // May be missing if not suported by platform, though
 
@@ -70,6 +77,7 @@ int64_t getCurrentResidentSetBytes();
 int64_t getPeakResidentSetBytes();
 int64_t getCurrentHeapBytes();
 #endif
+
 
 struct RunMetaData{
 	double config_time_sec;
@@ -88,8 +96,18 @@ struct RunMetaData{
 		peak_resident_memory_bytes = 0;
 		end_resident_memory_bytes = 0;
 	}
-};
 
+	void print() {
+        printf("Config: %.3lf Setup: %.3lf Run: %.3lf \n", config_time_sec, init_time_sec, run_time_sec);
+#ifdef __linux__
+        //get memory usage information too
+        long long memResidentPeak = peak_resident_memory_bytes = getPeakResidentSetBytes();
+        long long memResidentEnd = end_resident_memory_bytes = getCurrentResidentSetBytes();
+        long long memHeap = getCurrentHeapBytes();
+        printf("Peak: %lld Now: %lld Heap: %lld\n", memResidentPeak, memResidentEnd, memHeap);
+#endif
+    }
+};
 
 // A very fast and chaotic RNG
 // straight from Wikipedia
