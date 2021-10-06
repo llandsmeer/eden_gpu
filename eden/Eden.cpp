@@ -83,32 +83,51 @@ void setup_gpu(){
 }
 
 int main(int argc, char **argv){
-    SimulatorConfig config;
-    Model model;
-    RunMetaData metadata;
-    EngineConfig engine_config;
-    RawTables tabs;
+
     setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
     setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
     print_eden_cli_header();
+    RunMetaData metadata;
+
+
+//  Variables that are needed for initializing the model and
+    SimulatorConfig config;
+    Model model;
+    EngineConfig engine_config;
+
+//    Check the command line input with options
+    parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
+
+//  Find and check the specific engine_config
     setup_mpi(argc, argv);
     setup_gpu();
 
-    parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
+//    Initialize the memory for the generated model
+    RawTables tabs;  //--> we should merge this with The BACKendClass
+
 
     printf("Initializing model...\n");
     Timer init_timer;
     if(!GenerateModel(model, config, engine_config, tabs)){
         printf("NeuroML model could not be created\n"); exit(1);
     }
-    TrajectoryLogger trajectory_logger(engine_config);
+
+    TrajectoryLogger trajectory_logger(engine_config);  // We should merge this with the engine_config.
+
 
     printf("Allocating state buffers...\n");
-    StateBuffers state(tabs);
+    StateBuffers state(tabs);               // We should merge this with the BackEndClass
     CpuBackend backend(tabs, state);
-    backend.init();
+
+    backend.init();   //clean this up
+
+    //just some timer functions to time this meta data --> encorperate this into meta data class
     metadata.init_time_sec = init_timer.delta();
+
+    //keep
     if(config.dump_raw_layout) state.dump_raw_layout(tabs);
+
+    // call this MPI communicator
     MpiBuffers mpi_buffers(engine_config);
 
     printf("Starting simulation loop...\n");
@@ -116,19 +135,36 @@ int main(int argc, char **argv){
     double time = engine_config.t_initial;
     // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
     for( long long step = -3; time <= engine_config.t_final; step++ ){
+
+        // we don't need to keep setting this variable i think however if statement is worse.
         bool initializing = step <= 0;
+
+        //init mpi communication --> empty call if no mpi compilation
         mpi_buffers.init_communicate(engine_config, state, config); // need to copy between backend & state when using mpi
+
+        //execute the actual work items
         backend.execute_work_items(engine_config, config, step, time);
+
+        //dont check on initializing check on step < 0
         if( !initializing ){
             trajectory_logger.write_output_logs( engine_config, time,
                     backend.global_state_now(), /* needed on mpi???: */backend.global_tables_stateNow_f32());
         }
+
+        //dump to CMD CLI
         backend.dump_iteration(config, initializing, time, step);
+
+        //waith for all the MPI communication to be done.
         mpi_buffers.finish_communicate();
+
+        // check on step
         if( !initializing ) time += engine_config.dt;
+
+        //swap the double buffering idea.
         backend.swap_buffers();
     }
 
-    metadata.run_time_sec = run_timer.delta();
-    print_runtime_usage(metadata);
+    metadata.run_time_sec = run_timer.delta(); //make this part of the metadata class
+
+    print_runtime_usage(metadata); //make this part of the metadata class
 }
