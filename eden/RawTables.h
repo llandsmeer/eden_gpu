@@ -15,8 +15,8 @@ struct RawTables{
     typedef std::vector< long long, _mm_Mallocator<long long, ALIGNMENT> > Table_I64;
 
     struct ConsecutiveIterationCallbacks{
-        int start_item;
-        int n_items;
+        size_t start_item;
+        size_t n_items;
         IterationCallback callback;
     };
 

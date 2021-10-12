@@ -2,8 +2,12 @@
 #ifndef BACKENDS_H
 #define BACKENDS_H
 
+#include "Common.h"
+#include "NeuroML.h"
 #include "RawTables.h"
 #include "StateBuffers.h"
+#include "SimulatorConfig.h"
+#include "EngineConfig.h"
 
 class AbstractBackend {
 
@@ -65,11 +69,16 @@ public:
     long long * global_tables_const_i64_sizes() const override { return state->global_tables_const_i64_sizes.data(); }
     long long * global_tables_state_f32_sizes() const override { return state->global_tables_state_f32_sizes.data(); }
     long long * global_tables_state_i64_sizes() const override { return state->global_tables_state_i64_sizes.data(); }
+
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override {
+        //execute_work_items_one_by_one(engine_config, config, step, time);
+        execute_work_items_as_consecutives(engine_config, config, step, time);
+    }
+
+    void execute_work_items_one_by_one(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) {
         //prepare for parallel iteration
         const float dt = engine_config.dt;
-
         // Execute all work items
 //        #pragma omp parallel for schedule(runtime)
         for( long long item = 0; item < engine_config.work_items; item++ ){
@@ -93,6 +102,38 @@ public:
             }
         }
     }
+
+    void execute_work_items_as_consecutives(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) {
+        //prepare for parallel iteration
+        const float dt = engine_config.dt;
+        // Execute all work items
+        for (size_t idx = 0; idx < tabs.consecutive_kernels.size(); idx++) {
+            if(config.debug){
+                printf("consecutive items %lld start\n", (long long)idx);
+                // if(my_mpi.rank != 0) continue;
+                // continue;
+                fflush(stdout);
+            }
+            RawTables::ConsecutiveIterationCallbacks & cic = tabs.consecutive_kernels.at(idx);
+            #pragma omp parallel for schedule(runtime)
+            for (size_t item = cic.start_item; item < cic.start_item + cic.n_items; item++) {
+               cic.callback( time, dt,
+                                       tabs.global_constants.data(),      tabs.global_const_f32_index[item], global_tables_const_f32_sizes(),            global_tables_const_f32_arrays(),      tabs.global_table_const_f32_index[item],
+                                       global_tables_const_i64_sizes(),    global_tables_const_i64_arrays(),   tabs.global_table_const_i64_index[item],
+                                       global_tables_state_f32_sizes(),    global_tables_stateNow_f32(),       global_tables_stateNext_f32(),              tabs.global_table_state_f32_index[item],
+                                       global_tables_state_i64_sizes(),    global_tables_stateNow_i64(),       global_tables_stateNext_i64(),              tabs.global_table_state_i64_index[item],
+                                       global_state_now(),                 global_state_next(),                tabs.global_state_f32_index[item],
+                                       step
+                );
+            }
+            if(config.debug){
+                printf("consecutive items %lld end\n", (long long)idx);
+                fflush(stdout);
+            }
+        }
+    }
+
+
     void swap_buffers() override {
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
