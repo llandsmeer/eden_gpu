@@ -80,7 +80,7 @@ public:
         //prepare for parallel iteration
         const float dt = engine_config.dt;
         // Execute all work items
-//        #pragma omp parallel for schedule(runtime)
+        #pragma omp parallel for schedule(runtime)
         for( long long item = 0; item < engine_config.work_items; item++ ){
             if(config.debug){
                 printf("item %lld start\n", item);

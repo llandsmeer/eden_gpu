@@ -26,16 +26,13 @@ def system(cmd, gpu=False, submit=True):
         print(f'{bcolors.FAIL}FAILED, exit code = {status}{bcolors.ENDC}')
         exit(status)
 
-toolchains = ["gcc", "nvcc"]
+final = []
 
-for Toolchain in toolchains:
-    system(f'rm -f results1.txt')
-    system(f'make clean TOOLCHAIN={Toolchain}')
-    system(f'make eden TOOLCHAIN={Toolchain}')
-    system(f'bin/eden.debug.{Toolchain}.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml', gpu=Toolchain=='nvcc', submit=True)
+def verify(toolchain, nmlfile, output, target):
+    system(f'bin/eden.debug.{toolchain}.cpu.x nml {nmlfile}', gpu=toolchain=='nvcc', submit=True)
 
-    ref = pd.read_csv('LEMS_NML2_Ex25_MultiComp.txt', sep=' +', header=None, engine='python')
-    out = pd.read_csv('results1.txt', sep=' +', header=None, engine='python')
+    ref = pd.read_csv(target, sep=' +', header=None, engine='python')
+    out = pd.read_csv(output, sep=' +', header=None, engine='python')
 
     fail = False
     max_error = 0
@@ -45,7 +42,9 @@ for Toolchain in toolchains:
         error = (abs(target - pred) / target.ptp()).max()
         max_error = max(error, max_error)
         if not error < 0.02:
-            print(f'{bcolors.FAIL}REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}')
+            msg = f'{bcolors.FAIL}{toolchain}|{nmlfile}: REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}'
+            final.append(msg)
+            print(msg)
             fail = True
 
     if fail:
@@ -57,4 +56,19 @@ for Toolchain in toolchains:
         exit(1)
 
     else:
-        print(f'{bcolors.OKGREEN}VALIDATION PASS: {Toolchain} (max error={max_error*100:.2f}%){bcolors.ENDC}')
+        msg = f'{bcolors.OKGREEN}{toolchain}|{nmlfile}: VALIDATION PASS (max error={max_error*100:.2f}%){bcolors.ENDC}'
+        final.append(msg)
+        print(msg)
+
+toolchains = ["gcc", "nvcc"]
+
+for toolchain in toolchains:
+    system(f'rm -f results1.txt')
+    system(f'make clean TOOLCHAIN={toolchain}')
+    system(f'make eden TOOLCHAIN={toolchain}')
+    verify(toolchain, 'examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt')
+    verify(toolchain, 'examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt')
+
+print('(-- logs repeated here --)')
+for msg in final:
+    print(msg)

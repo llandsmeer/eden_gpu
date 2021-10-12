@@ -76,6 +76,7 @@ struct RawTables{
             }
         }
         consecutive_kernels.push_back(cic);
+        printf("create_consecutive_kernels_vector : reduced %lld callbacks to %lld consecutive kernels", (long long)callbacks.size(), (long long)consecutive_kernels.size());
     }
 };
 }
