@@ -1670,7 +1670,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
     // kernel file boilerplate code
 
-    auto EmitKernelFileHeader = [ &config ]( std::string &code ){
+    auto EmitKernelFileHeader = [ &config , &engine_config ]( std::string &code ){
         (void) config; // just in case
 
         char tmps[1000];
@@ -1681,22 +1681,33 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         if(config.debug){
             code += "#include <stdio.h>\n";
         }
+        code += "#if defined(__CUDACC__)\n";
+        code += "extern \"C\" {\n";
+        code += "#define DEVICE_FUNC __device__\n";
+        code += "#else\n";
+        code += "#define DEVICE_FUNC\n";
+        code += "#endif\n";
         sprintf(tmps, "typedef float * __restrict__ __attribute__((align_value (%zd))) Table_F32;\n", RawTables::ALIGNMENT); code += tmps;
         //TODO fix const correctness !
         sprintf(tmps, "typedef long long * __restrict__ __attribute__((align_value (%zd))) Table_I64;\n", RawTables::ALIGNMENT); code += tmps;
 
         // 32bit float <-> int type smuggling
-        code += "typedef union { int i32; float f32; } TypePun_I32F32; typedef char static_assert[ sizeof(int) == sizeof(float) ];\n";
-        code += "static float EncodeI32ToF32( int   i ){ TypePun_I32F32 cast; cast.i32 = i; return cast.f32;}\n";
-        code += "static int   EncodeF32ToI32( float f ){ TypePun_I32F32 cast; cast.f32 = f; return cast.i32;}\n";
+        code += "typedef union { int i32; float f32; } TypePun_I32F32;\n";
+
+        if (engine_config.backend != backend_kind_gpu) {
+            code += "typedef char static_assert[ sizeof(int) == sizeof(float) ];\n";
+        }
+
+        code += "static DEVICE_FUNC float EncodeI32ToF32( int   i ){ TypePun_I32F32 cast; cast.i32 = i; return cast.f32;}\n";
+        code += "static DEVICE_FUNC int   EncodeF32ToI32( float f ){ TypePun_I32F32 cast; cast.f32 = f; return cast.i32;}\n";
 
         // the humble but mighty step function
-        code += "static float stepf( float x ){ if( x < 0 ) return 0; else return 1;  }\n";
+        code += "static DEVICE_FUNC float stepf( float x ){ if( x < 0 ) return 0; else return 1;  }\n";
 
         // Hash-based RNG
         code += "\n";
         code += "// Credits to Thomas T. Wang: wang@cup.hp.com\n";
-        code += "static unsigned long long hash64shift( unsigned long long key ){\n";
+        code += "static DEVICE_FUNC unsigned long long hash64shift( unsigned long long key ){\n";
         code += "    key = (~key) + (key << 21); // key = (key << 21) - key - 1;\n";
         code += "    key = key ^ (key >> 24);\n";
         code += "    key = (key + (key << 3)) + (key << 8); // key * 265\n";
@@ -1706,11 +1717,11 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         code += "    key = key + (key << 31);\n";
         code += "    return key;\n";
         code += "}\n";
-        code += "static unsigned long long hash_128_to_64( unsigned long long hi, unsigned long long lo ){\n";
+        code += "static DEVICE_FUNC unsigned long long hash_128_to_64( unsigned long long hi, unsigned long long lo ){\n";
         code += "    return hash64shift( hash64shift( lo ) ^ hi );\n"; // perhaps something better LATER
         code += "}\n";
         code += "\n";
-        code += "static float randof( float x, long long work_item, long long instance, long long step, int invocation_id ){\n";
+        code += "static DEVICE_FUNC float randof( float x, long long work_item, long long instance, long long step, int invocation_id ){\n";
         code += "    // Make a unique stamp for the random number sampled\n";
         code += "    // Unique factors: work item, tabular instance, serial number of RNG invocation in kernel, timestep \n";
         // TODO add a simulation properties digest, to decouple from exact timestep #
@@ -1733,7 +1744,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
     auto EmitWorkItemRoutineHeader = [ &config ]( std::string &code ){
         (void) config; // just in case
-        code += "void doit( double time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
+        code += "void DEVICE_FUNC doit( double time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
         "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long table_cf32_local_index,\n"
         "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long table_ci64_local_index,\n"
         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long table_sf32_local_index,\n"
@@ -1762,7 +1773,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     };
     auto EmitKernelFileFooter = [ &config ]( std::string &code ){
         (void) config; // just in case
-
+        code += "#if defined(__CUDACC__)\n";
+        code += "}//extern \"C\"\n";
+        code += "#endif\n";
         code += "// Generated code block END\n";
     };
 
@@ -2398,7 +2411,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             input_impls[id_id] = inpimpl;
             return true;
         };
-        auto ImplementSpikeSender = [ &config ](
+        auto ImplementSpikeSender = [ &config, &engine_config ](
             const std::string &condition,
             const SignatureAppender_Table &AppendMulti,
             const std::string &for_what,
@@ -2440,7 +2453,12 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             //sprintf(tmps, "            global_stateNext_table_i64_arrays[table_id][word_id] = mask;\n" );  code += tmps;
             //sprintf(tmps, "            atomic_fetch_or_explicit( (atomic_ullong *) &( global_stateNext_table_i64_arrays[table_id][word_id] ), mask, memory_order_relaxed );\n" );  code += tmps;
-            code   += "            __sync_fetch_and_or( &( global_stateNext_table_i64_arrays[table_id][word_id] ), mask );\n" ;
+            //
+            if (engine_config.backend == backend_kind_cpu) {
+                code   += "            __sync_fetch_and_or( &( global_stateNext_table_i64_arrays[table_id][word_id] ), mask );\n" ;
+            } else {
+                code   += "            global_stateNext_table_i64_arrays[table_id][word_id] |= mask;\n" ;
+            }
 
             // end spike sending case
             code   += "        }\n";
@@ -4963,11 +4981,17 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         PrintWorkItemSignature(sig.cell_wig);
         }
 
-
         // output model code for all present cells TODO
         std::string code_id = sig.name + "_code";
-        std::string code_filename = code_id+ ".gen.c";
-        std::string dll_filename = code_id+ ".gen.so";
+        std::string code_filename, dll_filename;
+        if (engine_config.backend == backend_kind_gpu) {
+            code_filename = code_id+ ".gen.cu";
+            dll_filename = code_id+ ".gen.gpu.so";
+        } else {
+            code_filename = code_id+ ".gen.c";
+            dll_filename = code_id+ ".gen.so";
+        }
+
         FILE *fout = fopen(code_filename.c_str(), "w");
         if(!fout){
             perror(code_filename.c_str());
@@ -5002,9 +5026,24 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         }
         // TODO extra_flags, vec_report etc.
 
-        std::string compiler_name = "icc";
-        if(!config.use_icc){
-            compiler_name = "gcc";
+        std::string compiler_name;
+
+        if (engine_config.backend == backend_kind_gpu) {
+            if(config.use_icc) {
+                fprintf(stderr, "Error can't use icc to compile CUDA kernels");
+                return false;
+            }
+            compiler_name = "nvcc";
+            basic_flags = "-std=c++11 -lm -Xcompiler -Wall";
+            dll_flags = " -Xcompiler -fPIC -shared";
+            optimization_flags = "";
+            fastbuild_flags = "";
+        } else {
+            if(config.use_icc){
+                compiler_name = "icc";
+            } else {
+                compiler_name = "gcc";
+            }
         }
 
         std::string code_quality_flags = optimization_flags;
@@ -7261,8 +7300,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             spike_mirror_entry++;
         }
-        #ifdef LOLOL
-        #endif
     }
 
     // MPI_Finalize();

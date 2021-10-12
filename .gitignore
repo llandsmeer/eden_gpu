@@ -1,7 +1,9 @@
 #Ignore test results, no matter where they are
 *test_results
 *.gen.c
+*.gen.cu
 *.gen.so
+*.gen.gpu.so
 .idea/
 build/
 cmake*/

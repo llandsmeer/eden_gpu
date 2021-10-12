@@ -81,10 +81,22 @@ int main(int argc, char **argv){
     parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
 
 //-----> Init the backend
+#ifdef USE_GPU
+    engine_config.backend = backend_kind_gpu;
+#else
+    engine_config.backend = backend_kind_cpu;
+#endif
+
     printf("Initializing backend...\n");
     {
         if (engine_config.backend == backend_kind_cpu) {
             backend = new CpuBackend();
+
+#ifdef USE_GPU
+        } else if (engine_config.backend == backend_kind_gpu) {
+            backend = new CpuBackend();
+#endif
+
         } else {
             printf("No valid backed selected");
             exit(10);
