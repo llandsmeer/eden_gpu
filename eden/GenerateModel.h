@@ -1777,7 +1777,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         code += "}\n";
 
         if (engine_config.backend == backend_kind_gpu) {
-            code += "void __global__ doit_kernel(long long start, long long n_items,\n"
+            code += "static void __global__ doit_kernel(long long start, long long n_items,\n"
             "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
             "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
             "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
