@@ -4974,7 +4974,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 			" -Wno-attributes"
 			" -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-function";
 		std::string dll_flags = " -shared -fpic"; //" -shared -fpic -nodefaultlibs";
-		std::string optimization_flags = " -Ofast -march=native -mtune=native";
+		std::string optimization_flags = " -Ofast -mcpu=native -mtune=native";
 		std::string fastbuild_flags = " -O0";
 		std::string asm_flags = " -S -masm=intel -fverbose-asm";
 		std::string lm_flags = " -lm";
