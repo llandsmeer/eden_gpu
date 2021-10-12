@@ -1,0 +1,151 @@
+
+<Lems>
+
+<!-- Example with instances of multicompartmental cells...
+
+     Note: requires Neuron to run, e.g.
+
+     jnml LEMS_NML2_Ex25_MultiComp.xml -neuron
+-->
+
+
+<!-- Specify which component to run -->
+    <Target component="sim1"/>
+
+<!-- Include core NeuroML2 ComponentType definitions -->
+    <Include file="Cells.xml"/>
+    <Include file="Networks.xml"/>
+    <Include file="Simulation.xml"/>
+
+    <!-- Main NeuroML2 content. -->
+
+    <!-- Including file with a <neuroml> root, a "real" NeuroML 2 file -->
+    <Include file="../examples/NML2_SingleCompHHCell.nml"/> <!-- Used to import channels from HH example-->
+    <Include file="../examples/NML2_MultiCompCellNetwork.nml"/>
+
+    <!-- End of NeuroML2 content -->
+
+    <pulseGenerator id="p1" delay="100ms" duration="100ms" amplitude="0.08nA"/>
+    <pulseGenerator id="p2" delay="130ms" duration="110ms" amplitude="0.08nA"/>
+    <pulseGenerator id="p3" delay="140ms" duration="120ms" amplitude="0.08nA"/>
+
+    <network id="MultiCellTypesNetwork">
+
+        <population id="pop0" type="populationList" component="MultiCompCell">
+            <instance id="0">
+                <location x="0" y="0" z="0"/>
+            </instance>
+            <instance id="1">
+                <location x="100" y="0" z="0"/>
+            </instance>
+            <instance id="2">
+                <location x="200" y="0" z="0"/>
+            </instance>
+        </population>
+
+        <population id="pop1" component="hhcell" size="3"/>
+        <explicitInput target="pop1[0]" input="p1"/>
+        <explicitInput target="pop1[1]" input="p2"/>
+        <explicitInput target="pop1[2]" input="p3"/>
+
+        <population id="pop2" type="populationList" component="MultiCompCell">
+            <instance id="0">
+                <location x="0" y="0" z="0"/>
+            </instance>
+            <instance id="1">
+                <location x="100" y="0" z="0"/>
+            </instance>
+            <instance id="2">
+                <location x="200" y="0" z="0"/>
+            </instance>
+        </population>
+
+        <projection id="projAMPA" presynapticPopulation="pop0" postsynapticPopulation="pop2" synapse="AMPA">
+            <connection id="0" preCellId="../pop0/0/MultiCompCell" postCellId="../pop2/1/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="1" preCellId="../pop0/0/MultiCompCell" postCellId="../pop2/1/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+            <connection id="2" preCellId="../pop0/2/MultiCompCell" postCellId="../pop2/1/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="3" preCellId="../pop0/2/MultiCompCell" postCellId="../pop2/1/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="1" postFractionAlong="0.5"/>
+            <connection id="4" preCellId="../pop0/2/MultiCompCell" postCellId="../pop2/1/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+        </projection>
+
+        <projection id="projAMPA" presynapticPopulation="pop1" postsynapticPopulation="pop0" synapse="AMPA">
+            <connection id="0" preCellId="../pop1/0/MultiCompCell" postCellId="../pop0/0/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="1" preCellId="../pop1/0/MultiCompCell" postCellId="../pop0/1/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+            <connection id="2" preCellId="../pop1/2/MultiCompCell" postCellId="../pop0/2/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="3" preCellId="../pop1/2/MultiCompCell" postCellId="../pop0/0/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="1" postFractionAlong="0.5"/>
+            <connection id="4" preCellId="../pop1/2/MultiCompCell" postCellId="../pop0/1/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+        </projection>
+
+        <projection id="projAMPA" presynapticPopulation="pop2" postsynapticPopulation="pop0" synapse="AMPA">
+            <connection id="5" preCellId="../pop2/0/MultiCompCell" postCellId="../pop0/0/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="6" preCellId="../pop2/0/MultiCompCell" postCellId="../pop0/0/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+            <connection id="7" preCellId="../pop2/2/MultiCompCell" postCellId="../pop0/2/MultiCompCell" preSegmentId="0" preFractionAlong="0.5" postSegmentId="0" postFractionAlong="0.5"/>
+            <connection id="8" preCellId="../pop2/2/MultiCompCell" postCellId="../pop0/2/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="1" postFractionAlong="0.5"/>
+            <connection id="9" preCellId="../pop2/2/MultiCompCell" postCellId="../pop0/2/MultiCompCell" preSegmentId="1" preFractionAlong="0.5" postSegmentId="2" postFractionAlong="0.5"/>
+        </projection>
+
+        <inputList id="stimInput1" component="pulseGen2" population="pop0">
+            <input id="0" target="../pop0/0/MultiCompCell" segmentId="0" fractionAlong="0.5" destination="synapses"/>
+        </inputList>
+
+        <inputList id="stimInput2" component="pulseGen3" population="pop0">
+            <input id="1" target="../pop0/2/MultiCompCell" segmentId="0" fractionAlong="0.5" destination="synapses"/>
+        </inputList>
+
+        <inputList id="stimInput1" component="pulseGen2" population="pop2">
+            <input id="2" target="../pop2/0/MultiCompCell" segmentId="0" fractionAlong="0.5" destination="synapses"/>
+        </inputList>
+
+        <inputList id="stimInput2" component="pulseGen3" population="pop2">
+            <input id="3" target="../pop2/2/MultiCompCell" segmentId="0" fractionAlong="0.5" destination="synapses"/>
+        </inputList>
+
+    </network>
+
+
+
+    <Simulation id="sim1" length="250ms" step="0.005ms" target="MultiCompCellNetwork">
+
+        <Display id="d1" title="Ex25: MultiCompCellNetwork: cells pre" timeScale="1ms" xmin="0" xmax="140" ymin="-75" ymax="52">
+            <Line id ="cell 0: soma" quantity="pop0/0/MultiCompCell/v" scale="1mV"  color="#ee0555" timeScale="1ms"/>
+            <Line id ="cell 2: soma" quantity="pop0/2/MultiCompCell/v" scale="1mV"  color="#111555" timeScale="1ms"/>
+            <!--<Line id ="cell 0: dend1" quantity="pop0/0/MultiCompCell/1/v" scale="1mV"  color="#ee5555" timeScale="1ms"/>
+            <Line id ="cell 0: dend2" quantity="pop0/0/MultiCompCell/2/v" scale="1mV"  color="#efff55" timeScale="1ms"/>-->
+        </Display>
+        <Display id="d2" title="Ex25: MultiCompCellNetwork: cell1" timeScale="1ms" xmin="0" xmax="140" ymin="-75" ymax="52">
+            <Line id ="cell 1: soma" quantity="pop0/1/MultiCompCell/0/v" scale="1mV"  color="#ee0555" timeScale="1ms"/>
+            <Line id ="cell 1: dend1" quantity="pop0/1/MultiCompCell/1/v" scale="1mV"  color="#ee5555" timeScale="1ms"/>
+            <Line id ="cell 1: dend2" quantity="pop0/1/MultiCompCell/2/v" scale="1mV"  color="#efff55" timeScale="1ms"/>
+        </Display>
+
+        <Display id="synsA" title="Ex25: MultiCompCellNetwork: AMPA synapses" timeScale="1ms" xmin="0" xmax="140" ymin="-.1" ymax="1">
+            <Line id ="AMPA g: pre 0:0-soma" quantity="pop0/1/MultiCompCell/0/synapses:AMPA:0/g" scale="1nS"  color="#ee0555" timeScale="1ms"/>
+            <Line id ="AMPA g: pre 0:1-dend2" quantity="pop0/1/MultiCompCell/2/synapses:AMPA:0/g" scale="1nS"  color="#eeff11" timeScale="1ms"/>
+
+            <Line id ="AMPA g: pre 2:0-soma" quantity="pop0/1/MultiCompCell/0/synapses:AMPA:1/g" scale="1nS"  color="#22ff11" timeScale="1ms"/>
+            <Line id ="AMPA g: pre 2:1-dend1" quantity="pop0/1/MultiCompCell/1/synapses:AMPA:0/g" scale="1nS"  color="#77ff11" timeScale="1ms"/>
+            <Line id ="AMPA g: pre 2:2-dend2" quantity="pop0/1/MultiCompCell/2/synapses:AMPA:1/g" scale="1nS"  color="#ffff11" timeScale="1ms"/>
+
+        </Display>
+
+        <Display id="synsN" title="Ex25: MultiCompCellNetwork: NMDA synapses" timeScale="1ms" xmin="0" xmax="140" ymin="-.1" ymax="1">
+            <Line id ="NMDA g: pre 0:0-soma" quantity="pop0/1/MultiCompCell/0/synapses:NMDA:0/g" scale="1nS"  color="#ee0555" timeScale="1ms"/>
+            <Line id ="NMDA g: pre 0:1-dend2" quantity="pop0/1/MultiCompCell/2/synapses:NMDA:0/g" scale="1nS"  color="#eeff11" timeScale="1ms"/>
+
+            <Line id ="NMDA g: pre 2:0-soma" quantity="pop0/1/MultiCompCell/0/synapses:NMDA:1/g" scale="1nS"  color="#22ff11" timeScale="1ms"/>
+            <Line id ="NMDA g: pre 2:1-dend1" quantity="pop0/1/MultiCompCell/1/synapses:NMDA:0/g" scale="1nS"  color="#77ff11" timeScale="1ms"/>
+            <Line id ="NMDA g: pre 2:2-dend2" quantity="pop0/1/MultiCompCell/2/synapses:NMDA:1/g" scale="1nS"  color="#ffff11" timeScale="1ms"/>
+
+        </Display>
+
+        <!-- add logging for headless sims -->
+
+        <OutputFile id="first" fileName="results2.txt">
+            <OutputColumn id="v_cell_0" quantity="pop0/0/MultiCompCell/0/v"/>
+            <OutputColumn id="v_cell_1" quantity="pop0/1/MultiCompCell/0/v"/>
+            <OutputColumn id="v_cell_2" quantity="pop0/2/MultiCompCell/0/v"/>
+        </OutputFile>
+
+    </Simulation>
+
+</Lems>
