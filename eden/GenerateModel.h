@@ -1,3 +1,14 @@
+//
+// Created by max on 04-10-21.
+//
+
+#ifndef EDEN_GENERATEMODEL_H
+#define EDEN_GENERATEMODEL_H
+
+#include "chrono"
+#include "RawTables.h"
+#include "StateBuffers.h"
+
 bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConfig &engine_config, RawTables &tabs){
 	
 	/*
@@ -7266,3 +7277,5 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 	
 	return true;
 }
+
+#endif

@@ -1,3 +1,10 @@
+//
+// Created by max on 04-10-21.
+//
+
+#ifndef EDEN_GPU_TIMER_H
+#define EDEN_GPU_TIMER_H
+
 struct Timer {
     timeval start;
     Timer() {
@@ -9,3 +16,5 @@ struct Timer {
         return TimevalDeltaSec(start, end);
     }
 };
+
+#endif
