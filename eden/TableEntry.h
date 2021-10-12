@@ -1,3 +1,6 @@
+#ifndef EDEN_TABLEENTRY_H
+#define EDEN_TABLEENTRY_H
+
 // references to the raw tables
 struct TabEntryRef{
 	long long table;
@@ -21,3 +24,4 @@ auto GetDecodedTableEntryId = [  ]( unsigned long long packed_id ){
 	return ret;
 };
 
+#endif

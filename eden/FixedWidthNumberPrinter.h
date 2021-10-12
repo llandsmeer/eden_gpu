@@ -1,3 +1,6 @@
+#ifndef EDEN_FIXEDWIDTHNUMBERPRINTER_H
+#define EDEN_FIXEDWIDTHNUMBERPRINTER_H
+
 extern "C" {
 // for strictly fixed-width data output (also useful for parallel writing to files)
 struct FixedWidthNumberPrinter{
@@ -33,3 +36,5 @@ struct FixedWidthNumberPrinter{
 	}
 };
 }
+
+#endif

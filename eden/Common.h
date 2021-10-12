@@ -1,7 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-
 #ifdef _WIN32
 
 // Minimum supported version: Windows XP, aka 5.1
@@ -55,6 +54,25 @@
 // Non-standard helper routines
 #define pow10(powah) pow(10,(powah))
 #define stricmp strcasecmp
+
+
+//---->> Append to vector helpers
+template< typename Container >
+static void AppendToVector(Container &append_to, const Container &append_this){
+    append_to.insert(append_to.end(), append_this.begin(), append_this.end());
+};
+template<
+        typename CAppendTo, typename CAppendThis,
+        typename std::enable_if< !std::is_same< CAppendTo, CAppendThis >::value, int >::type = 0
+>
+static void AppendToVector(CAppendTo &append_to, const CAppendThis &append_this){
+    auto new_size = append_to.size() + append_this.size() ;
+    append_to.reserve( new_size );
+    for( size_t i = 0; i < append_this.size(); i++ ){
+        append_to.push_back( append_this[i] );
+    }
+};
+
 
 // do not specify alignment for the pointers, in the generic interface
 // cannot specify __restrict__ because it is quietly dropped by compilers ( ! ) when the type is allocated with new
