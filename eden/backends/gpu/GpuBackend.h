@@ -28,8 +28,13 @@ public:
     }
 
 //    getters
-    float * global_state_now() const override  { return m_global_state_now; }
-    Table_F32 * global_tables_stateNow_f32 () const override  { return m_global_tables_stateNow_f32; }
+#ifdef USE_GPU
+    float * global_state_now() const override ;
+    Table_F32 * global_tables_stateNow_f32 () const override ;
+#else
+    float * global_state_now() const override  { return 0; }
+    Table_F32 * global_tables_stateNow_f32 () const override  { return 0; }
+#endif
 
     float * global_state_next() const  { return m_global_state_next; }
     Table_I64 * global_tables_stateNow_i64 () const  { return m_global_tables_stateNow_i64; }
@@ -46,7 +51,6 @@ public:
 
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override{
-        printf("GPU GPU GPU GPU GPU GPU GPU GPU GPU GPU %d GPU GPU GPU GPU GPU GPU GPU GPU GPU GPU\n", step);
 #ifdef USE_GPU
         execute_work_gpu(engine_config,config, step, time);
 #else

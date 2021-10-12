@@ -178,3 +178,33 @@ bool GpuBackend::copy_data_to_device() {
 
     return true;
 }
+
+float * GpuBackend::global_state_now() const {
+    CUDA_CHECK_RETURN(cudaMemcpy(
+                state->state_one.data(),
+                m_global_state_now,
+                state->state_one.size()*sizeof(state->state_one[0]),
+                cudaMemcpyDeviceToHost));
+    return state->state_one.data();
+}
+
+Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {
+    // here be dragons
+    // XXX TODO: remove temp allocation - we can just keep the temp_f32 vector from allocation
+    // XXX TODO: call this function only when using MPI
+    std::vector<float*> temp(state->global_tables_stateOne_f32_arrays.size(), 0);
+    CUDA_CHECK_RETURN(cudaMemcpy(
+                temp.data(),
+                m_global_tables_stateNow_f32,
+                temp.size()*sizeof(float*),
+                cudaMemcpyDeviceToHost));
+    for (size_t i = 0; i < temp.size(); i++) {
+        size_t size = state->global_tables_state_f32_sizes[i];
+        CUDA_CHECK_RETURN(cudaMemcpy(
+                    state->global_tables_stateOne_f32_arrays[i],
+                    temp[i],
+                    size*sizeof(float),
+                    cudaMemcpyDeviceToHost));
+    }
+    return state->global_tables_stateOne_f32_arrays.data();
+}
