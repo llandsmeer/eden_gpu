@@ -61,7 +61,7 @@ def verify(toolchain, nmlfile, output, target):
         print(msg)
 
 toolchains = ["gcc", "nvcc"]
-toolchains = ["nvcc"]
+toolchains = ["gcc", "nvcc"]
 
 for toolchain in toolchains:
     system(f'rm -f results1.txt')
