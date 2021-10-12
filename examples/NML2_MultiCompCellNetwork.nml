@@ -89,6 +89,57 @@
             <instance id="2">
                 <location x="200" y="0" z="0"/>
             </instance>
+            <instance id="3">
+                <location x="300" y="0" z="0"/>
+            </instance>
+            <instance id="4">
+                <location x="400" y="0" z="0"/>
+            </instance>
+            <instance id="5">
+                <location x="500" y="0" z="0"/>
+            </instance>
+            <instance id="6">
+                <location x="600" y="0" z="0"/>
+            </instance>
+            <instance id="7">
+                <location x="700" y="0" z="0"/>
+            </instance>
+            <instance id="8">
+                <location x="800" y="0" z="0"/>
+            </instance>
+            <instance id="9">
+                <location x="900" y="0" z="0"/>
+            </instance>
+            <instance id="10">
+                <location x="1000" y="0" z="0"/>
+            </instance>
+            <instance id="11">
+                <location x="1100" y="0" z="0"/>
+            </instance>
+            <instance id="12">
+                <location x="1200" y="0" z="0"/>
+            </instance>
+            <instance id="13">
+                <location x="1300" y="0" z="0"/>
+            </instance>
+            <instance id="14">
+                <location x="1400" y="0" z="0"/>
+            </instance>
+            <instance id="15">
+                <location x="1500" y="0" z="0"/>
+            </instance>
+            <instance id="16">
+                <location x="1600" y="0" z="0"/>
+            </instance>
+            <instance id="17">
+                <location x="1700" y="0" z="0"/>
+            </instance>
+            <instance id="18">
+                <location x="1800" y="0" z="0"/>
+            </instance>
+            <instance id="19">
+                <location x="1900" y="0" z="0"/>
+            </instance>
         </population>
 
         <projection id="projAMPA" presynapticPopulation="pop0" postsynapticPopulation="pop0" synapse="AMPA">

@@ -1,24 +1,51 @@
 import pandas as pd
 import os
 
-for Toolchain in ["gcc","nvcc"]:
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
-    if os.system('make clean') != 0:
-        exit()
 
-    if os.system('make eden TOOLCHAIN=' + Toolchain) != 0:
-        exit()
+def system(cmd, gpu=False, submit=True):
+    if os.path.exists('/opt/ibm/spectrum_mpi/jsm_pmix/bin/jsrun') and submit:
+        if gpu:
+            job = 'jsrun -g2 -c42 -n1'
+        else:
+            job = 'jsrun -c42 -n1'
+        cmd = f'{job} {cmd}'
+    print(f'{bcolors.HEADER}Executing {cmd}{bcolors.ENDC}')
+    status = os.system(cmd)
+    if status != 0:
+        print(f'{bcolors.FAIL}FAILED, exit code = {status}{bcolors.ENDC}')
+        exit(status)
 
-    if os.system('bin/eden.debug.' + Toolchain + '.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml') != 0:
-        exit()
+toolchains = ["gcc", "nvcc"]
+
+for Toolchain in toolchains:
+    system(f'rm -f results1.txt')
+    system(f'make clean TOOLCHAIN={Toolchain}')
+    system(f'make eden TOOLCHAIN={Toolchain}')
+    system(f'bin/eden.debug.{Toolchain}.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml', gpu=Toolchain=='nvcc', submit=True)
 
     ref = pd.read_csv('LEMS_NML2_Ex25_MultiComp.txt', sep=' +', header=None, engine='python')
     out = pd.read_csv('results1.txt', sep=' +', header=None, engine='python')
 
     fail = False
+    max_error = 0
     for i in range(4):
-        if not (ref[i].values == out[i].values).all():
-            print('REPRODUCTION ERROR!!')
+        target = ref[i].values
+        pred = out[i].values
+        error = (abs(target - pred) / target.ptp()).max()
+        max_error = max(error, max_error)
+        if not error < 0.02:
+            print(f'{bcolors.FAIL}REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}')
             fail = True
 
     if fail:
@@ -27,6 +54,7 @@ for Toolchain in ["gcc","nvcc"]:
             plt.plot(out[0], out[i], color='black')
             plt.plot(ref[0], ref[i], '--', color='green')
         plt.show()
+        exit(1)
 
     else:
-        print('VALIDATION PASS: ' + Toolchain)
+        print(f'{bcolors.OKGREEN}VALIDATION PASS: {Toolchain} (max error={max_error*100:.2f}%){bcolors.ENDC}')

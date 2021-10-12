@@ -17,6 +17,7 @@ struct MpiBuffers {
         received_probes( recv_off_to_node.size(), false),
         received_sends( recv_off_to_node.size(), false)
     {
+        printf("Allocating comm buffers...\n");
         for( const auto &keyval : engine_config.sendlist_impls ){
             send_off_to_node.push_back( keyval.first );
             send_bufs.emplace_back();
@@ -191,8 +192,19 @@ struct MpiBuffers {
     }
 
     void finish_communicate() {
-		// wait for sends, to finish the iteration
-		MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE );
+        // wait for sends, to finish the iteration
+        MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE );
     }
+
+    ~MpiBuffers () {
+        // this is necessary, so stdio files are actually flushed
+        MPI_Finalize();
+    }
+};
+#else
+struct MpiBuffers {
+    MpiBuffers(EngineConfig & engine_config) {}
+    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
+    void finish_communicate() {}
 };
 #endif

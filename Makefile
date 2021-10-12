@@ -147,7 +147,7 @@ TOOLCHAIN_LIBS_PATH ?= /usr/local/
 # Compiler flags
 # TODO more optimization flags
 ifneq "$(TOOLCHAIN)" "nvcc"
-	CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra} -fsanitize=address
+	CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra} 
 	CFLAGS_release := ${CFLAGS_basic} -O3
 	CFLAGS_debug := ${CFLAGS_basic} -g
 
@@ -175,7 +175,7 @@ endif
 
 # TODO temporary till targets are better specified in makefile
 ifdef USE_MPI
-CFLAGS += -DUSE_MPI
+	CFLAGS += -DUSE_MPI
 endif
 
 ifeq "$(TOOLCHAIN)" "nvcc"
@@ -208,10 +208,10 @@ ${BIN_DIR}/eden${DOT_X}: ${OBJ_DIR}/eden${DOT_O} ${OBJ_DIR}/Utils${DOT_O} \
 		${OBJ_DIR}/NeuroML${DOT_O} ${OBJ_DIR}/LEMS_Expr${DOT_A} ${OBJ_DIR}/LEMS_CoreComponents${DOT_O} \
 		${OBJ_DIR}/${PUGIXML_NAME}${DOT_O} # third-party libs
 ifeq "$(CXX)" "nvcc"
-	$(CXX) -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o
+	$(CXX) -std=c++11  -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o
 	$(CXX) $^ ${OBJ_DIR}/GPU_helpers.o $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
 else
-	$(CXX) $^ $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@ ${EXTRA_GPU_OBJECT_FILE}
+	$(CXX) $^ $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
 endif
 
 	$(MAYBE_NOT_TARGET_MAC) || true # /usr/bin/ld $@ -headerpad_max_install_names -o $@
@@ -222,10 +222,10 @@ ${OBJ_DIR}/eden${DOT_O}: ${SRC_EDEN}/Eden.cpp ${SRC_EDEN}/NeuroML.h ${SRC_EDEN}/
 
 # own helper libraries
 ${OBJ_DIR}/Utils${DOT_O}: ${SRC_COMMON}/Utils.cpp ${SRC_COMMON}/Common.h
-	$(CXX) -c $< $(CXXFLAGS) -o $@
+	$(CXX) -c $< $(CXXFLAGS) -o $@ 
 
 ${OBJ_DIR}/NeuroML${DOT_O}: ${SRC_EDEN}/NeuroML.cpp ${SRC_EDEN}/NeuroML.h ${SRC_EDEN}/neuroml/LEMS_Expr.h ${SRC_COMMON}/Common.h  ${SRC_PUGIXML}/pugixml.hpp ${SRC_PUGIXML}/pugiconfig.hpp
-	$(CXX) -c $< $(CXXFLAGS) -o $@
+	$(CXX) -c $< $(CXXFLAGS) -o $@ -I.
 
 ${OBJ_DIR}/LEMS_Expr${DOT_A}: ${OBJ_DIR}/LEMS_Expr${DOT_O} ${OBJ_DIR}/LEMS_Expr.yy${DOT_O} ${OBJ_DIR}/LEMS_Expr.tab${DOT_O} 
 	ar rcs $@ $^
@@ -294,17 +294,14 @@ ${BIN_DIR}/nml_projector${DOT_O}: ${TESTING_DIR}/nml_projector.cpp ${SRC_COMMON}
 		${SRC_PUGIXML}/pugixml.hpp ${SRC_PUGIXML}/pugiconfig.hpp
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
-run: eden
-	bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
-
 test:
 	make -f testing/docker/Makefile test
 
 run: eden
-	bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
+	bin/eden.$(BUILD).gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
 
 run_gpu: eden
-	bin/eden.debug.nvcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
+	bin/eden.$(BUILD).nvcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
 
 clean:
 	rm -f $(OBJ_DIR)/*.o $(OBJ_DIR)/*.yy.* $(OBJ_DIR)/*.tab.* $(OBJ_DIR)/*.a  $(OBJ_DIR)/*.gen.*

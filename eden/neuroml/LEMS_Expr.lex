@@ -8,14 +8,16 @@
 
 #include "stdlib.h"
 
-#if YY_FLEX_MAJOR_VERSION == 2 && \
-    YY_FLEX_MINOR_VERSION == 6 && \
-    YY_FLEX_SUBMINOR_VERSION == 3
+/*#if YY_FLEX_MAJOR_VERSION == 2 && \
+//    YY_FLEX_MINOR_VERSION == 6 && \
+//    YY_FLEX_SUBMINOR_VERSION == 3
+*/
+
 /* https://github.com/westes/flex/issues/162 */
 #undef yywrap
 #define yywrap(x) (/*CONSTCOND*/1)
 #define YY_SKIP_YYWRAP
-#endif
+//#endif
 
 // https://stackoverflow.com/a/22125500
 #define YY_USER_ACTION \
