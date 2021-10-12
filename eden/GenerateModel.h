@@ -1742,9 +1742,14 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         code += "\n";
     };
 
-    auto EmitWorkItemRoutineHeader = [ &config ]( std::string &code ){
+    auto EmitWorkItemRoutineHeader = [ &config , &engine_config ]( std::string &code ){
         (void) config; // just in case
-        code += "void DEVICE_FUNC doit( double time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
+        std::string kernel_name = "doit";
+        if (engine_config.backend == backend_kind_gpu) {
+            kernel_name = "doit_single";
+            code += "static ";
+        }
+        code += "void DEVICE_FUNC " + kernel_name + "( double time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
         "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long table_cf32_local_index,\n"
         "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long table_ci64_local_index,\n"
         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long table_sf32_local_index,\n"
@@ -1766,10 +1771,53 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         code += "    \n";
     };
 
-    auto EmitWorkItemRoutineFooter = [ &config ]( std::string &code ){
+    auto EmitWorkItemRoutineFooter = [ &config , &engine_config]( std::string &code ){
         (void) config; // just in case
 
         code += "}\n";
+
+        if (engine_config.backend == backend_kind_gpu) {
+            code += "void __global__ doit_kernel(long long start, long long n_items,\n"
+            "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
+            "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
+            "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
+            "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
+            "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
+            "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
+            "long long step ){\n"
+            "   int tid = blockIdx.x;\n"
+            "   if (tid >= n_items) return;\n"
+            "   long long item = start + tid;\n"
+            "   doit_single( time, dt, \n"
+            "                      global_constants,                global_const_f32_index[item],       global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+            "                      global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
+            "                      global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
+            "                      global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
+            "                      global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
+            "                      step \n"
+            "                      );\n";
+            code += "}\n";
+
+            code += "void doit(long long start, long long n_items,\n"
+            "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
+            "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
+            "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
+            "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
+            "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
+            "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
+            "long long step ){\n"
+            "   doit_kernel<<<n_items,1>>>(start, n_items,\n"
+            "       time, dt, global_constants, global_const_f32_index, \n"
+            "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,\n"
+            "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,\n"
+            "       global_state_table_f32_sizes, global_state_table_f32_arrays, global_stateNext_table_f32_arrays, global_table_state_f32_index,\n"
+            "       global_state_table_i64_sizes, global_state_table_i64_arrays, global_stateNext_table_i64_arrays, global_table_state_i64_index,\n"
+            "       global_state, global_stateNext, global_state_f32_index, \n"
+            "       step);\n"
+            "   // cudaDeviceSynchronize();\n"
+            "}\n" ;
+        }
+
     };
     auto EmitKernelFileFooter = [ &config ]( std::string &code ){
         (void) config; // just in case
