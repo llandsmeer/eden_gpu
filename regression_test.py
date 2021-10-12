@@ -36,9 +36,14 @@ for Toolchain in ["gcc", "nvcc"]:
     out = pd.read_csv('results1.txt', sep=' +', header=None, engine='python')
 
     fail = False
+    max_error = 0
     for i in range(4):
-        if not (ref[i].values == out[i].values).all():
-            print(f'{bcolors.FAIL}REPRODUCTION ERROR!!{bcolors.ENDC}')
+        target = ref[i].values
+        pred = out[i].values
+        error = (abs(target - pred) / target.ptp()).max()
+        max_error = max(error, max_error)
+        if not error < 0.02:
+            print(f'{bcolors.FAIL}REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}')
             fail = True
 
     if fail:
@@ -50,4 +55,4 @@ for Toolchain in ["gcc", "nvcc"]:
         exit(1)
 
     else:
-        print(f'{bcolors.OKGREEN}VALIDATION PASS: {Toolchain}{bcolors.ENDC}')
+        print(f'{bcolors.OKGREEN}VALIDATION PASS: {Toolchain} (max error={max_error*100:.2f}%){bcolors.ENDC}')
