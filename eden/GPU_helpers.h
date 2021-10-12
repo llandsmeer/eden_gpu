@@ -7,6 +7,10 @@
 
 #include "EngineConfig.h"
 
+#ifdef USE_GPU
+void test();
+#endif
+
 void setup_gpu(EngineConfig &engine_config){
     if(engine_config.backend == backend_kind_gpu){
         printf("GPU backend selected, checking if it's available");
@@ -18,9 +22,5 @@ void setup_gpu(EngineConfig &engine_config){
     printf("No GPU support");
 #endif
 }
-
-#ifdef USE_GPU
-void test();
-#endif
 
 #endif //EDEN_GPU_GPU_helpers_H
