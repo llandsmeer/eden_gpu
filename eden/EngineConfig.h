@@ -2,6 +2,7 @@
 #define ENGINECONFIG_H
 
 #include "TableEntry.h"
+#include "map"
 
 extern "C" {
 

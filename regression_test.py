@@ -31,8 +31,8 @@ final = []
 def verify(toolchain, nmlfile, output, target):
     system(f'bin/eden.debug.{toolchain}.cpu.x nml {nmlfile}', gpu=toolchain=='nvcc', submit=True)
 
-    ref = pd.read_csv(target, sep=' +', header=None, engine='python')
-    out = pd.read_csv(output, sep=' +', header=None, engine='python')
+    ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
+    out = pd.read_csv(output, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
 
     fail = False
     max_error = 0
