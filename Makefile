@@ -208,8 +208,9 @@ ${BIN_DIR}/eden${DOT_X}: ${OBJ_DIR}/eden${DOT_O} ${OBJ_DIR}/Utils${DOT_O} \
 		${OBJ_DIR}/NeuroML${DOT_O} ${OBJ_DIR}/LEMS_Expr${DOT_A} ${OBJ_DIR}/LEMS_CoreComponents${DOT_O} \
 		${OBJ_DIR}/${PUGIXML_NAME}${DOT_O} # third-party libs
 ifeq "$(CXX)" "nvcc"
-	$(CXX) -std=c++11  -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o
-	$(CXX) $^ ${OBJ_DIR}/GPU_helpers.o $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
+	$(CXX) -std=c++14  -c ${SRC_EDEN}/backends/gpu/GpuBackend.cu -o ${OBJ_DIR}/GpuBackend.o $(CXXFLAGS)
+	$(CXX) -std=c++14  -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o $(CXXFLAGS)
+	$(CXX) $^ ${OBJ_DIR}/GPU_helpers.o  ${OBJ_DIR}/GpuBackend.o $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
 else
 	$(CXX) $^ $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
 endif

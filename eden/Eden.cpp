@@ -33,24 +33,22 @@ Parallel simulation engine for ODE-based models
 #include "Common.h"
 #include "NeuroML.h"
 #include "MMMallocator.h"
-#include "StringHelpers.h"
 
 //clean
 #include "GPU_helpers.h"
 #include "Timer.h"
+#include "backends/cpu/CpuBackend.h"
+#include "backends/gpu/GpuBackend.h"
 
 // mess to clean up
-#include "IterationCallback.h"
 #include "FixedWidthNumberPrinter.h"
 #include "GeomHelp_Base.h"
 #include "TypePun.h"
-
 #include "EngineConfig.h"
 #include "SimulatorConfig.h"
 #include "GenerateModel.h"
 #include "Mpi_helpers.h"
 #include "TrajectoryLogger.h"
-#include "backends.h"
 #include "parse_command_line_args.h"
 #include "print_eden_cli_header.h"
 
@@ -58,8 +56,8 @@ int main(int argc, char **argv){
 
 //-----> Starting the simulator
     {
-        setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
-        setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
+//        setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
+//        setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
         print_eden_cli_header();          // To print the CLI header
     }
 
@@ -82,10 +80,14 @@ int main(int argc, char **argv){
 
 //-----> Init the backend
     printf("Initializing backend...\n");
+    engine_config.backend = backend_kind_gpu;
     {
         if (engine_config.backend == backend_kind_cpu) {
             backend = new CpuBackend();
-        } else {
+        }else if (engine_config.backend == backend_kind_gpu){
+            backend = new GpuBackend();
+        }
+        else {
             printf("No valid backed selected");
             exit(10);
         }
