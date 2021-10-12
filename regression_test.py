@@ -12,7 +12,14 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def system(cmd):
+
+def system(cmd, gpu=False):
+    if os.path.exists('/opt/ibm/spectrum_mpi/jsm_pmix/bin/jsrun'):
+        if gpu:
+            job = 'jsrun -g2 -c42 -n1'
+        else:
+            job = 'jsrun -c42 -n1'
+        cmd = f'{job} {cmd}'
     print(f'{bcolors.HEADER}Executing {cmd}{bcolors.ENDC}')
     status = os.system(cmd)
     if status != 0:
@@ -23,7 +30,7 @@ for Toolchain in ["gcc", "nvcc"]:
     system(f'rm -f results1.txt')
     system(f'make clean TOOLCHAIN={Toolchain}')
     system(f'make eden TOOLCHAIN={Toolchain}')
-    system(f'bin/eden.debug.{Toolchain}.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml')
+    system(f'bin/eden.debug.{Toolchain}.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml', gpu=Toolchain=='nvcc')
 
     ref = pd.read_csv('LEMS_NML2_Ex25_MultiComp.txt', sep=' +', header=None, engine='python')
     out = pd.read_csv('results1.txt', sep=' +', header=None, engine='python')
