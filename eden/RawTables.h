@@ -1,3 +1,6 @@
+#ifndef RAWTABLES_H
+#define RAWTABLES_H
+
 extern "C" {
 // initial states, internal constants, connectivity matrices, iteration function pointers and everything
 // so crunching can commence
@@ -46,3 +49,4 @@ struct RawTables{
 	}
 };
 }
+#endif

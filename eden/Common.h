@@ -87,7 +87,7 @@ struct RunMetaData{
 	
 	int64_t peak_resident_memory_bytes; //0 for unknown
 	int64_t end_resident_memory_bytes; //0 for unknown
-	RunMetaData(){
+    RunMetaData(){
 		config_time_sec = NAN;
 		init_time_sec = NAN;
 		run_time_sec = NAN;
@@ -108,6 +108,7 @@ struct RunMetaData{
 #endif
     }
 };
+
 
 // A very fast and chaotic RNG
 // straight from Wikipedia

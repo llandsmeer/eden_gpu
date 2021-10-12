@@ -204,7 +204,7 @@ struct MpiBuffers {
 #else
 struct MpiBuffers {
     MpiBuffers(EngineConfig & engine_config) {}
-    void init_communicate(EngineConfig & engine_config, StateBuffers & state, SimulatorConfig & config) {}
+    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
     void finish_communicate() {}
 };
 #endif
