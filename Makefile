@@ -52,7 +52,9 @@ ifndef TARGET
 # Auto-detect target OS/arch/etc, somehow
 # should work on recent gcc, icc, llvm
 # Hopefully, nobody will care to cross-compile using MSVC
-TARGET = $(shell $(TOOLCHAIN) -dumpmachine )
+	ifneq "$(TOOLCHAIN)" "nvcc"
+		TARGET = $(shell $(TOOLCHAIN) -dumpmachine )
+	endif
 endif
 
 # Negative logic to allow shorting with a positive result in shell
@@ -110,6 +112,23 @@ endif
 COMPILER_SET := ok
 endif
 
+ifeq ($(TOOLCHAIN), nvcc)
+
+ifdef USE_MPI
+LD  := ld
+CC  := mpicc
+CXX := mpic++
+endif
+
+ifndef USE_MPI
+LD  := ld
+CC  := nvcc
+CXX := nvcc
+endif
+
+COMPILER_SET := ok
+endif
+
 # for special custom toolchains
 ifdef TOOLCHAIN_OVERRIDE
 
@@ -127,17 +146,19 @@ TOOLCHAIN_LIBS_PATH ?= /usr/local/
 
 # Compiler flags
 # TODO more optimization flags
-CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra}
-CFLAGS_release := ${CFLAGS_basic} -O3
-CFLAGS_debug := ${CFLAGS_basic} -g
+ifneq "$(TOOLCHAIN)" "nvcc"
+	CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra} -fsanitize=address
+	CFLAGS_release := ${CFLAGS_basic} -O3
+	CFLAGS_debug := ${CFLAGS_basic} -g
 
-CFLAGS_omp_gcc := -fopenmp
-CFLAGS_omp_icc :=  -openmp
-CFLAGS_omp :=  ${CFLAGS_omp_${TOOLCHAIN}}
+	CFLAGS_omp_gcc := -fopenmp
+	CFLAGS_omp_icc :=  -openmp
+	CFLAGS_omp :=  ${CFLAGS_omp_${TOOLCHAIN}}
 
-CFLAGS_cpu = ${CFLAGS_omp}
+	CFLAGS_cpu = ${CFLAGS_omp}
 
-CFLAGS ?= ${CFLAGS_${BUILD}} ${CFLAGS_${PLATFORM}} -I ${SRC_COMMON} -I ${PROJ_BASE}
+	CFLAGS ?= ${CFLAGS_${BUILD}} ${CFLAGS_${PLATFORM}} -I ${SRC_COMMON} -I ${PROJ_BASE}
+endif
 
 LIBS ?=  
 ifneq (,$(findstring linux,$(TARGET)))
@@ -155,6 +176,10 @@ endif
 # TODO temporary till targets are better specified in makefile
 ifdef USE_MPI
 CFLAGS += -DUSE_MPI
+endif
+
+ifeq "$(TOOLCHAIN)" "nvcc"
+	CFLAGS += -DUSE_GPU
 endif
 
 CXXFLAGS := ${CFLAGS} -std=c++14
@@ -182,10 +207,18 @@ eden:  ${BIN_DIR}/eden${DOT_X}
 ${BIN_DIR}/eden${DOT_X}: ${OBJ_DIR}/eden${DOT_O} ${OBJ_DIR}/Utils${DOT_O} \
 		${OBJ_DIR}/NeuroML${DOT_O} ${OBJ_DIR}/LEMS_Expr${DOT_A} ${OBJ_DIR}/LEMS_CoreComponents${DOT_O} \
 		${OBJ_DIR}/${PUGIXML_NAME}${DOT_O} # third-party libs
-	$(CXX) $^ $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
+ifeq "$(CXX)" "nvcc"
+	$(CXX) -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o
+	$(CXX) $^ ${OBJ_DIR}/GPU_helpers.o $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@
+else
+	$(CXX) $^ $(LIBS) $(CXXFLAGS) $(CFLAGS_omp) -o $@ ${EXTRA_GPU_OBJECT_FILE}
+endif
+
 	$(MAYBE_NOT_TARGET_MAC) || true # /usr/bin/ld $@ -headerpad_max_install_names -o $@
+
 ${OBJ_DIR}/eden${DOT_O}: ${SRC_EDEN}/Eden.cpp ${SRC_EDEN}/NeuroML.h ${SRC_EDEN}/neuroml/LEMS_Expr.h ${SRC_COMMON}/Common.h  ${SRC_COMMON}/MMMallocator.h
 	$(CXX) -c $< $(CXXFLAGS) $(CFLAGS_omp) -o $@
+
 
 # own helper libraries
 ${OBJ_DIR}/Utils${DOT_O}: ${SRC_COMMON}/Utils.cpp ${SRC_COMMON}/Common.h
@@ -261,13 +294,22 @@ ${BIN_DIR}/nml_projector${DOT_O}: ${TESTING_DIR}/nml_projector.cpp ${SRC_COMMON}
 		${SRC_PUGIXML}/pugixml.hpp ${SRC_PUGIXML}/pugiconfig.hpp
 	$(CXX) -c $< $(CXXFLAGS) -o $@
 
+run: eden
+	bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
+
 test:
 	make -f testing/docker/Makefile test
+
+run: eden
+	bin/eden.debug.gcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
+
+run_gpu: eden
+	bin/eden.debug.nvcc.cpu.x nml examples/LEMS_NML2_Ex25_MultiComp.xml
 
 clean:
 	rm -f $(OBJ_DIR)/*.o $(OBJ_DIR)/*.yy.* $(OBJ_DIR)/*.tab.* $(OBJ_DIR)/*.a  $(OBJ_DIR)/*.gen.*
 	rm -f $(BIN_DIR)/*$(EXE_EXTENSION)
 	"find" $(TESTING_DIR)/sandbox/. ! -name 'README.txt' ! -name '.' -type d -exec rm -rf {} +
 
-.PHONY: all test clean ${TARGETS} ${MODULES} 
+.PHONY: all run run_gpu test clean ${TARGETS} ${MODULES}
 .PHONY: toolchain
