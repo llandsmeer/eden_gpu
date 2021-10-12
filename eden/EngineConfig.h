@@ -1,9 +1,16 @@
 extern "C" {
+
+typedef uint32_t backend_kind;
+#define backend_kind_nil 0
+#define backend_kind_cpu 1
+#define backend_kind_gpu 2
+
+//todo clean this up
+
 // and more information that is needed for the engine
 struct EngineConfig{
 	
 	struct TrajectoryLogger {
-		
 		struct LogColumn{
 			enum Type{
 				NONE,
@@ -34,13 +41,13 @@ struct EngineConfig{
 		std::vector<LogColumn> columns;
 		
 	};
-	
-	
+
 	long long work_items;
 	double t_initial; // in engine time units
 	double t_final;
 	float dt; // in engine time units
-	
+    backend_kind backend = backend_kind_cpu;
+
 	std::vector<TrajectoryLogger> trajectory_loggers;
 	
 	// for inter-node communication

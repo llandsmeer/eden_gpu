@@ -61,8 +61,10 @@ Parallel simulation engine for ODE-based models
 #include "parse_command_line_args.h"
 #include "print_eden_cli_header.h"
 
-
-void setup_gpu(){
+void setup_gpu(EngineConfig &engine_config){
+    if(engine_config.backend == backend_kind_gpu){
+        printf("GPU backend selected, checking if it's available");
+    }
     #ifdef USE_GPU
     printf("hello from CPU compiled code\n");
     test();
@@ -72,87 +74,96 @@ void setup_gpu(){
 }
 
 int main(int argc, char **argv){
-
     setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
     setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
-    print_eden_cli_header();
-    RunMetaData metadata;
+    print_eden_cli_header();          // To print the CLI header
+    RunMetaData metadata;             // To keep track of non backend specific meta data
+    SimulatorConfig config;           // Configuration of the simulator
+    Model model;                      // Keeping track of the model
+    EngineConfig engine_config;       // Configuration of the Engine
+    AbstractBackend *backend = nullptr;
 
-
-//  Variables that are needed for initializing the model and
-    SimulatorConfig config;
-    Model model;
-    EngineConfig engine_config;
-
-//    Check the command line input with options
+// Check the command line input with options
     parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
 
-//  Find and check the specific engine_config
+// Find and check the specific engine_config
     setup_mpi(argc, argv);
-    setup_gpu();
+    setup_gpu(engine_config);
 
-//    Initialize the memory for the generated model
-    RawTables tabs;  //--> we should merge this with The BACKendClass
-
-
-    printf("Initializing model...\n");
-    Timer init_timer;
-    if(!GenerateModel(model, config, engine_config, tabs)){
-        printf("NeuroML model could not be created\n"); exit(1);
+// Init the backend
+    {
+        if (engine_config.backend == backend_kind_cpu) {
+            backend = new CpuBackend();
+        } else {
+            printf("No valid backed selected");
+            exit(10);
+        }
     }
 
-    TrajectoryLogger trajectory_logger(engine_config);  // We should merge this with the engine_config.
 
+//----> Initialize the backend
+    printf("Initializing model...\n");
+    Timer init_timer;
+    if (!GenerateModel(model, config, engine_config, backend->tabs)) {
+        printf("NeuroML model could not be created\n");
+        exit(1);
+    }
+
+    TrajectoryLogger trajectory_logger(engine_config); //To log results
 
     printf("Allocating state buffers...\n");
-    StateBuffers state(tabs);               // We should merge this with the BackEndClass
-    CpuBackend backend(tabs, state);
-
-    backend.init();   //clean this up
+    backend->init();
 
     //just some timer functions to time this meta data --> encorperate this into meta data class
     metadata.init_time_sec = init_timer.delta();
+//<-----
 
-    //keep
-    if(config.dump_raw_layout) state.dump_raw_layout(tabs);
 
-    // call this MPI communicator
+//to backend.
+    if(config.dump_raw_layout) backend->state->dump_raw_layout(backend->tabs);
+
+
+// call this MPI communicator
     MpiBuffers mpi_buffers(engine_config);
 
+//---->  Simulations loop
+
     printf("Starting simulation loop...\n");
-    Timer run_timer;
-    double time = engine_config.t_initial;
-    // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
-    for( long long step = -3; time <= engine_config.t_final; step++ ){
+    {
+        Timer run_timer;
+        double time = engine_config.t_initial;
+        // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
+        for (long long step = -3; time <= engine_config.t_final; step++) {
 
-        // we don't need to keep setting this variable i think however if statement is worse.
-        bool initializing = step <= 0;
+            // we don't need to keep setting this variable i think however if statement is worse.
+            bool initializing = step <= 0;
 
-        //init mpi communication --> empty call if no mpi compilation
-        mpi_buffers.init_communicate(engine_config, state, config); // need to copy between backend & state when using mpi
+            //init mpi communication --> empty call if no mpi compilation
+            mpi_buffers.init_communicate(engine_config, backend->state, config); // need to copy between backend & state when using mpi
 
-        //execute the actual work items
-        backend.execute_work_items(engine_config, config, step, time);
+            //execute the actual work items
+            backend->execute_work_items(engine_config, config, (int)step, time);
 
-        //dont check on initializing check on step < 0
-        if( !initializing ){
-            trajectory_logger.write_output_logs( engine_config, time,
-                    backend.global_state_now(), /* needed on mpi???: */backend.global_tables_stateNow_f32());
+            //dont check on initializing check on step < 0
+            if (!initializing) {
+                trajectory_logger.write_output_logs(engine_config, time,
+                                                    backend->global_state_now(), /* needed on mpi???: */backend->global_tables_stateNow_f32());
+            }
+
+            //dump to CMD CLI
+            backend->dump_iteration(config, initializing, time, step);
+
+            //waith for all the MPI communication to be done.
+            mpi_buffers.finish_communicate();
+
+            // check on step
+            if (!initializing) time += engine_config.dt;
+
+            //swap the double buffering idea.
+            backend->swap_buffers();
         }
-
-        //dump to CMD CLI
-        backend.dump_iteration(config, initializing, time, step);
-
-        //waith for all the MPI communication to be done.
-        mpi_buffers.finish_communicate();
-
-        // check on step
-        if( !initializing ) time += engine_config.dt;
-
-        //swap the double buffering idea.
-        backend.swap_buffers();
+        metadata.run_time_sec = run_timer.delta();
     }
 
-    metadata.run_time_sec = run_timer.delta();
     metadata.print();
 }

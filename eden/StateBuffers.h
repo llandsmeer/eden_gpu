@@ -1,3 +1,6 @@
+#ifndef STATEBUFFERS_H
+#define STATEBUFFERS_H
+
 struct StateBuffers {
     // allocate at least two state vectors, to iterate in parallel
     RawTables::Table_F32 state_one;
@@ -167,3 +170,4 @@ struct StateBuffers {
     }
 };
 
+#endif
