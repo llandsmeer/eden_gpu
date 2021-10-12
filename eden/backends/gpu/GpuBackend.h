@@ -46,6 +46,7 @@ public:
 
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override{
+        printf("GPU GPU GPU GPU GPU GPU GPU GPU GPU GPU %d GPU GPU GPU GPU GPU GPU GPU GPU GPU GPU\n", step);
 #ifdef USE_GPU
         execute_work_gpu(engine_config,config, step, time);
 #else

@@ -67,44 +67,114 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
 }
 
 bool GpuBackend::copy_data_to_device() {
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_constants,                       tabs.global_constants.size()*sizeof(tabs.global_constants[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_const_f32_index,                 tabs.global_constants.size() * sizeof(tabs.global_constants[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_const_f32_index,           tabs.global_const_f32_index.size() * sizeof(tabs.global_const_f32_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_const_i64_index,           tabs.global_table_const_f32_index.size() * sizeof(tabs.global_table_const_f32_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_state_f32_index,           tabs.global_table_const_i64_index.size() * sizeof(tabs.global_table_const_i64_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_state_i64_index,           tabs.global_table_state_f32_index.size() * sizeof(tabs.global_table_state_f32_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_f32_index,                 tabs.global_table_state_i64_index.size() * sizeof(tabs.global_table_state_i64_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_now,                       tabs.global_state_f32_index.size() * sizeof(tabs.global_state_f32_index[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_next,                      state->state_one.size() * sizeof(state->state_one[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_f32,             state->state_two.size() * sizeof(state->state_two[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_i64,             state->global_tables_stateOne_f32_arrays.size() * sizeof(state->global_tables_stateOne_f32_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_f32,            state->global_tables_stateOne_i64_arrays.size() * sizeof(state->global_tables_stateOne_i64_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_i64,            state->global_tables_stateTwo_f32_arrays.size() * sizeof(state->global_tables_stateTwo_f32_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_arrays,         state->global_tables_stateTwo_i64_arrays.size() * sizeof(state->global_tables_stateTwo_i64_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_arrays,         state->global_tables_const_f32_arrays.size() * sizeof(state->global_tables_const_f32_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_sizes,          state->global_tables_const_i64_arrays.size() * sizeof(state->global_tables_const_i64_arrays[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_sizes,          state->global_tables_const_f32_sizes.size() * sizeof(state->global_tables_const_f32_sizes[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_state_f32_sizes,          state->global_tables_const_i64_sizes.size() * sizeof(state->global_tables_const_i64_sizes[0])));
-    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_state_i64_sizes,          state->global_tables_state_f32_sizes.size() * sizeof(state->global_tables_state_f32_sizes[0])));
+    printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
 
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_constants                 ,  tabs.global_constants.data()                     ,tabs.global_constants.size()*sizeof(tabs.global_constants[0])                                         ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_const_f32_index           ,  tabs.global_const_f32_index.data()               ,tabs.global_constants.size() * sizeof(tabs.global_constants[0])                                       ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_const_f32_index     ,  tabs.global_table_const_f32_index.data()         ,tabs.global_const_f32_index.size() * sizeof(tabs.global_const_f32_index[0])                           ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_const_i64_index     ,  tabs.global_table_const_i64_index.data()         ,tabs.global_table_const_f32_index.size() * sizeof(tabs.global_table_const_f32_index[0])               ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_state_f32_index     ,  tabs.global_table_state_f32_index.data()         ,tabs.global_table_const_i64_index.size() * sizeof(tabs.global_table_const_i64_index[0])               ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_state_i64_index     ,  tabs.global_table_state_i64_index.data()         ,tabs.global_table_state_f32_index.size() * sizeof(tabs.global_table_state_f32_index[0])               ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_f32_index           ,  tabs.global_state_f32_index.data()               ,tabs.global_table_state_i64_index.size() * sizeof(tabs.global_table_state_i64_index[0])               ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_now                 ,  state->state_one.data()                          ,tabs.global_state_f32_index.size() * sizeof(tabs.global_state_f32_index[0])                           ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_next                ,  state->state_two.data()                          ,state->state_one.size() * sizeof(state->state_one[0])                                                 ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_f32       ,  state->global_tables_stateOne_f32_arrays.data()  ,state->state_two.size() * sizeof(state->state_two[0])                                                 ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_i64       ,  state->global_tables_stateOne_i64_arrays.data()  ,state->global_tables_stateOne_f32_arrays.size() * sizeof(state->global_tables_stateOne_f32_arrays[0]) ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_f32      ,  state->global_tables_stateTwo_f32_arrays.data()  ,state->global_tables_stateOne_i64_arrays.size() * sizeof(state->global_tables_stateOne_i64_arrays[0]) ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_i64      ,  state->global_tables_stateTwo_i64_arrays.data()  ,state->global_tables_stateTwo_f32_arrays.size() * sizeof(state->global_tables_stateTwo_f32_arrays[0]) ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_arrays   ,  state->global_tables_const_f32_arrays.data()     ,state->global_tables_stateTwo_i64_arrays.size() * sizeof(state->global_tables_stateTwo_i64_arrays[0]) ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_arrays   ,  state->global_tables_const_i64_arrays.data()     ,state->global_tables_const_f32_arrays.size() * sizeof(state->global_tables_const_f32_arrays[0])       ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_sizes    ,  state->global_tables_const_f32_sizes.data()      ,state->global_tables_const_i64_arrays.size() * sizeof(state->global_tables_const_i64_arrays[0])       ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_sizes    ,  state->global_tables_const_i64_sizes.data()      ,state->global_tables_const_f32_sizes.size() * sizeof(state->global_tables_const_f32_sizes[0])         ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_state_f32_sizes    ,  state->global_tables_state_f32_sizes.data()      ,state->global_tables_const_i64_sizes.size() * sizeof(state->global_tables_const_i64_sizes[0])         ,cudaMemcpyHostToDevice));
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_state_i64_sizes    ,  state->global_tables_state_i64_sizes.data()      ,state->global_tables_state_f32_sizes.size() * sizeof(state->global_tables_state_f32_sizes[0])         ,cudaMemcpyHostToDevice));
+    // alloc simple
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_constants, tabs.global_constants.size()*sizeof(tabs.global_constants[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_const_f32_index, tabs.global_const_f32_index.size()*sizeof(tabs.global_const_f32_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_const_f32_index, tabs.global_table_const_f32_index.size()*sizeof(tabs.global_table_const_f32_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_const_i64_index, tabs.global_table_const_i64_index.size()*sizeof(tabs.global_table_const_i64_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_state_f32_index, tabs.global_table_state_f32_index.size()*sizeof(tabs.global_table_state_f32_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_table_state_i64_index, tabs.global_table_state_i64_index.size()*sizeof(tabs.global_table_state_i64_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_f32_index, tabs.global_state_f32_index.size()*sizeof(tabs.global_state_f32_index[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_now, state->state_one.size()*sizeof(state->state_one[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_state_next, state->state_two.size()*sizeof(state->state_two[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_sizes, state->global_tables_const_f32_sizes.size()*sizeof(state->global_tables_const_f32_sizes[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_sizes, state->global_tables_const_i64_sizes.size()*sizeof(state->global_tables_const_i64_sizes[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_state_f32_sizes, state->global_tables_state_f32_sizes.size()*sizeof(state->global_tables_state_f32_sizes[0])));
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_state_i64_sizes, state->global_tables_state_i64_sizes.size()*sizeof(state->global_tables_state_i64_sizes[0])));
+
+    // copy simple
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_constants,                tabs.global_constants.data(),                   tabs.global_constants.size()*sizeof(tabs.global_constants[0]),                                  cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_const_f32_index,          tabs.global_const_f32_index.data(),             tabs.global_const_f32_index.size()*sizeof(tabs.global_const_f32_index[0]),                      cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_const_f32_index,    tabs.global_table_const_f32_index.data(),       tabs.global_table_const_f32_index.size()*sizeof(tabs.global_table_const_f32_index[0]),          cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_const_i64_index,    tabs.global_table_const_i64_index.data(),       tabs.global_table_const_i64_index.size()*sizeof(tabs.global_table_const_i64_index[0]),          cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_state_f32_index,    tabs.global_table_state_f32_index.data(),       tabs.global_table_state_f32_index.size()*sizeof(tabs.global_table_state_f32_index[0]),          cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_table_state_i64_index,    tabs.global_table_state_i64_index.data(),       tabs.global_table_state_i64_index.size()*sizeof(tabs.global_table_state_i64_index[0]),          cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_f32_index,          tabs.global_state_f32_index.data(),             tabs.global_state_f32_index.size()*sizeof(tabs.global_state_f32_index[0]),                      cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_now,                state->state_one.data(),                        state->state_one.size()*sizeof(state->state_one[0]),                                            cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_state_next,               state->state_two.data(),                        state->state_two.size()*sizeof(state->state_two[0]),                                            cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_sizes,   state->global_tables_const_f32_sizes.data(),    state->global_tables_const_f32_sizes.size()*sizeof(state->global_tables_const_f32_sizes[0]),    cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_sizes,   state->global_tables_const_i64_sizes.data(),    state->global_tables_const_i64_sizes.size()*sizeof(state->global_tables_const_i64_sizes[0]),    cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_state_f32_sizes,   state->global_tables_state_f32_sizes.data(),    state->global_tables_state_f32_sizes.size()*sizeof(state->global_tables_state_f32_sizes[0]),    cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_state_i64_sizes,   state->global_tables_state_i64_sizes.data(),    state->global_tables_state_i64_sizes.size()*sizeof(state->global_tables_state_i64_sizes[0]),    cudaMemcpyHostToDevice));
+
+    /* double pointers */
+
+    std::vector<float*> temp_f32;
+
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_f32, state->global_tables_stateOne_f32_arrays.size()*sizeof(state->global_tables_stateOne_f32_arrays[0]))); // state->global_tables_state_f32_sizes.data()
+    for (size_t i = 0; i < state->global_tables_stateOne_f32_arrays.size(); i++) {
+        size_t size = state->global_tables_state_f32_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        float * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
+        temp_f32.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_f32, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    temp_f32.clear();
+
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_f32, state->global_tables_stateTwo_f32_arrays.size()*sizeof(state->global_tables_stateTwo_f32_arrays[0]))); // state->global_tables_state_f32_sizes.data()
+    for (size_t i = 0; i < state->global_tables_stateTwo_f32_arrays.size(); i++) {
+        size_t size = state->global_tables_state_f32_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        float * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
+        temp_f32.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_f32, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    temp_f32.clear();
+
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_arrays, state->global_tables_const_f32_arrays.size()*sizeof(state->global_tables_const_f32_arrays[0]))); // state->global_tables_const_f32_sizes.data()
+    for (size_t i = 0; i < state->global_tables_const_f32_arrays.size(); i++) {
+        size_t size = state->global_tables_const_f32_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        float * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
+        temp_f32.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_arrays, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    temp_f32.clear();
+
+    std::vector<long long*> temp_i64;
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_i64, state->global_tables_stateOne_i64_arrays.size()*sizeof(state->global_tables_stateOne_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data(),
+    for (size_t i = 0; i < state->global_tables_stateOne_i64_arrays.size(); i++) {
+        size_t size = state->global_tables_state_i64_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        long long * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
+        temp_i64.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_i64, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    temp_i64.clear();
+
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_i64, state->global_tables_stateTwo_i64_arrays.size()*sizeof(state->global_tables_stateTwo_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data(),
+    for (size_t i = 0; i < state->global_tables_stateTwo_i64_arrays.size(); i++) {
+        size_t size = state->global_tables_state_i64_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        long long * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
+        temp_i64.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_i64, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    temp_i64.clear();
+
+    CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_arrays, state->global_tables_const_i64_arrays.size()*sizeof(state->global_tables_const_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data()
+    for (size_t i = 0; i < state->global_tables_const_i64_arrays.size(); i++) {
+        size_t size = state->global_tables_const_i64_sizes[i];
+        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
+        long long * item_ptr;
+        CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
+        CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
+        temp_i64.push_back(item_ptr);
+    }
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_arrays, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    temp_i64.clear();
+
     return true;
 }
