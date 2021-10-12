@@ -1,4 +1,6 @@
 extern "C" {
+// assume standard C calling convention, which is probably the only cross-module one in most architectures
+// bother if problems arise LATER
 typedef void ( *IterationCallback)(
 	double time,
 	float dt,
