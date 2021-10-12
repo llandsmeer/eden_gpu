@@ -112,7 +112,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
         temp_f32.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_f32, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_f32, temp_f32.data(), temp_f32.size()*sizeof(float*), cudaMemcpyHostToDevice));
     temp_f32.clear();
 
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_f32, state->global_tables_stateTwo_f32_arrays.size()*sizeof(state->global_tables_stateTwo_f32_arrays[0]))); // state->global_tables_state_f32_sizes.data()
@@ -124,7 +124,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
         temp_f32.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_f32, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_f32, temp_f32.data(), temp_f32.size()*sizeof(float*), cudaMemcpyHostToDevice));
     temp_f32.clear();
 
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_arrays, state->global_tables_const_f32_arrays.size()*sizeof(state->global_tables_const_f32_arrays[0]))); // state->global_tables_const_f32_sizes.data()
@@ -136,7 +136,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
         temp_f32.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_arrays, temp_f32.data(), temp_f32.size()*sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_f32_arrays, temp_f32.data(), temp_f32.size()*sizeof(float*), cudaMemcpyHostToDevice));
     temp_f32.clear();
 
     std::vector<long long*> temp_i64;
@@ -149,7 +149,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
         temp_i64.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_i64, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNow_i64, temp_i64.data(), temp_i64.size()*sizeof(long long*), cudaMemcpyHostToDevice));
     temp_i64.clear();
 
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_i64, state->global_tables_stateTwo_i64_arrays.size()*sizeof(state->global_tables_stateTwo_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data(),
@@ -161,7 +161,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
         temp_i64.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_i64, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_stateNext_i64, temp_i64.data(), temp_i64.size()*sizeof(long long*), cudaMemcpyHostToDevice));
     temp_i64.clear();
 
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_arrays, state->global_tables_const_i64_arrays.size()*sizeof(state->global_tables_const_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data()
@@ -173,7 +173,7 @@ bool GpuBackend::copy_data_to_device() {
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
         temp_i64.push_back(item_ptr);
     }
-    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_arrays, temp_i64.data(), temp_i64.size()*sizeof(long long), cudaMemcpyHostToDevice));
+    CUDA_CHECK_RETURN(cudaMemcpy(m_global_tables_const_i64_arrays, temp_i64.data(), temp_i64.size()*sizeof(long long*), cudaMemcpyHostToDevice));
     temp_i64.clear();
 
     return true;
