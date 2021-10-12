@@ -6,7 +6,7 @@
     <include href="channels/cah.channel.nml"/>
     <include href="channels/kca.channel.nml"/>
     <include href="channels/h.channel.nml"/>
-    <include href="channels/ca.nml"/>
+    <include href="channels/ca_0.1um.nml"/>
     <include href="channels/cacc.channel.nml"/>
     <include href="channels/na_a.channel.nml"/>
     <include href="channels/leak.channel.nml"/>

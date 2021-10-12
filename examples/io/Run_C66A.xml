@@ -1,7 +1,7 @@
 <Lems>
 
     <!-- Specify which component to run -->
-    <Target component="Test" reportFile="SimStat.txt"/>
+    <Target component="Test" reportFile="results/SimStat_C66A.txt"/>
 
     <!-- Include core NeuroML2 ComponentType definitions -->
     <Include file="Cells.xml"/>
@@ -18,7 +18,7 @@
     <Include file="channels/cah.channel.nml"/>
     <Include file="channels/kca.channel.nml"/>
     <Include file="channels/h.channel.nml"/>
-    <Include file="channels/ca.nml"/>
+    <Include file="channels/ca_0.1um.nml"/>
     <Include file="channels/cacc.channel.nml"/>
     <Include file="channels/na_a.channel.nml"/>
     <Include file="channels/leak.channel.nml"/>
@@ -33,11 +33,11 @@
             <Line id="8" quantity="population_of_C66A/0/C66A/8/caConc" scale="1" color="#0534e4" timeScale="1ms"/>
         </Display>
 
-        <OutputFile id="voltage traces" fileName="Test.v.dat">
+        <OutputFile id="voltage traces" fileName="results/Test_C66A.v.dat">
             <OutputColumn id="0" quantity="population_of_C66A/0/C66A/0/v"/> 
         </OutputFile>
 
-        <OutputFile id="Caconc file" fileName="Test.caconc.dat">
+        <OutputFile id="Caconc file" fileName="results/Test_C66A.caconc.dat">
             <OutputColumn id="8" quantity="population_of_C66A/0/C66A/8/caConc"/> 
         </OutputFile>
 

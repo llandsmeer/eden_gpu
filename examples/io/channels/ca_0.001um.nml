@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <neuroml xmlns="http://www.neuroml.org/schema/neuroml2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.neuroml.org/schema/neuroml2 https://raw.github.com/NeuroML/NeuroML2/development/Schemas/NeuroML2/NeuroML_v2beta4.xsd" id="Ca_conc">
 
-
-<decayingPoolConcentrationModel_Anwar id="ca_conc" restingConc="0.0mM" decayConstant="33.333333333333ms" ion="ca" shellDepth="0.1um"/>
-
-
-
-
+<decayingPoolConcentrationModel_Anwar id="ca_conc" restingConc="0.0mM" decayConstant="33.333333333333ms" ion="ca" shellDepth="0.001um"/>
 
 <ComponentType name="decayingPoolConcentrationModel_Anwar"
         extends="concentrationModel"
@@ -15,7 +10,6 @@
         <Parameter name="restingConc" dimension="concentration"/>
         <Parameter name="decayConstant" dimension="time"/>
         <Parameter name="shellDepth" dimension="length"/>
-        
 
         <Constant name="Faraday" dimension="charge_per_mole" value="96485.3C_per_mol"/>
         <Constant name="AREA_SCALE" dimension="area" value="1m2"/>
@@ -45,7 +39,7 @@
                 <StateAssignment variable="concentration" value="initialConcentration"/>
                 <StateAssignment variable="extConcentration" value="initialExtConcentration"/>
             </OnStart>
-            
+
             <OnCondition test="concentration .lt. 0">
                 <StateAssignment variable="concentration" value="0"/>
             </OnCondition>
