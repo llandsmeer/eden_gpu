@@ -1,3 +1,6 @@
+#ifndef EDEN_ITERATION_CALLBACK_H
+#define EDEN_ITERATION_CALLBACK_H
+
 extern "C" {
 // assume standard C calling convention, which is probably the only cross-module one in most architectures
 // bother if problems arise LATER
@@ -28,3 +31,5 @@ void UndefinedCallback(
 	abort();
 }
 }
+
+#endif
