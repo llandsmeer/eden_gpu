@@ -1,3 +1,6 @@
+#ifndef EDEN_SIMULATOR_CONFIG
+#define EDEN_SIMULATOR_CONFIG
+
 extern "C" {
 // general options for the simulator
 struct SimulatorConfig{
@@ -46,3 +49,5 @@ struct SimulatorConfig{
 	}
 };
 }
+
+#endif
