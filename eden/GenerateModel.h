@@ -7360,7 +7360,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     engine_config.t_final = engine_config.t_initial + sim.length;
     engine_config.dt = sim.step;
 
-    tabs.create_consecutive_kernels_vector();
+    tabs.create_consecutive_kernels_vector(config.skip_combining_consecutive_kernels);
 
     // yay!
     printf("instantiation complete!\n");

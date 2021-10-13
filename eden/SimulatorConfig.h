@@ -20,6 +20,8 @@ struct SimulatorConfig{
 	bool use_icc;
 	bool tweak_lmvec;
 	bool output_assembly;
+
+    bool skip_combining_consecutive_kernels = false;
 	
 	// TODO knobs:
 	// vector vs.hardcoded sequence for bwd euler, also heuristic
