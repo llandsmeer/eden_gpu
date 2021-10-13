@@ -5082,7 +5082,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 return false;
             }
             compiler_name = "nvcc";
-            basic_flags = "-std=c++11 -lm -Xcompiler -Wall";
+            basic_flags = "-std=c++11 -lm -Xcompiler -Wall,-Wno-attributes,-Wno-unused-variable,-Wno-unused-but-set-variable,-Wno-unused-function";
             dll_flags = " -Xcompiler -fPIC -shared";
             optimization_flags = "";
             fastbuild_flags = "";
