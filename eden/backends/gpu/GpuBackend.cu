@@ -192,7 +192,9 @@ Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {
     // here be dragons
     // XXX TODO: remove temp allocation - we can just keep the temp_f32 vector from allocation
     // XXX TODO: call this function only when using MPI
-    std::vector<float*> temp(state->global_tables_stateOne_f32_arrays.size(), 0);
+    // Also, state->global_tables_stateOne_f32_arrays points to state->state_one in some way
+    // leading to overwrites in certain cases, but not others (?)
+    std::vector<float*> temp(state->global_tables_stateTwo_f32_arrays.size(), 0);
     CUDA_CHECK_RETURN(cudaMemcpy(
                 temp.data(),
                 m_global_tables_stateNow_f32,
@@ -201,10 +203,10 @@ Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {
     for (size_t i = 0; i < temp.size(); i++) {
         size_t size = state->global_tables_state_f32_sizes[i];
         CUDA_CHECK_RETURN(cudaMemcpy(
-                    state->global_tables_stateOne_f32_arrays[i],
+                    state->global_tables_stateTwo_f32_arrays[i],
                     temp[i],
                     size*sizeof(float),
                     cudaMemcpyDeviceToHost));
     }
-    return state->global_tables_stateOne_f32_arrays.data();
+    return state->global_tables_stateTwo_f32_arrays.data();
 }
