@@ -107,6 +107,9 @@ void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, M
         else if(arg == "single-kernels") {
             config.skip_combining_consecutive_kernels = true;
         }
+        else if(arg == "syscall-guard") {
+            config.syscall_guard_callback = true;
+        }
 		
 		else{
 			//unknown, skip it

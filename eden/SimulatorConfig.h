@@ -22,6 +22,7 @@ struct SimulatorConfig{
 	bool output_assembly;
 
     bool skip_combining_consecutive_kernels = false;
+    bool syscall_guard_callback = false;
 	
 	// TODO knobs:
 	// vector vs.hardcoded sequence for bwd euler, also heuristic

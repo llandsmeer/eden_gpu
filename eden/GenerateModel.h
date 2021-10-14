@@ -1761,6 +1761,10 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
         code += "    \n";
         code += "    char initial_state = (step <= 0);\n";
+        if (config.syscall_guard_callback) {
+            //code += "    if (!initial_state) { syscall(400); }\n";
+            code += "    if (!initial_state) { __asm__(\"pushq %rax; movq $400, %rax; syscall; popq %rax\"); }\n";
+        }
         code += "    const float time_f32 = time; //when not accumulating small deltas, double precision is not necessary, and it messes up with SIMD\n";
         code +=   "    \n";
 
@@ -1774,6 +1778,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     auto EmitWorkItemRoutineFooter = [ &config , &engine_config]( std::string &code ){
         (void) config; // just in case
 
+        if (config.syscall_guard_callback) {
+            code += "    if (!initial_state) { __asm__(\"pushq %rax; movq $401, %rax; syscall; popq %rax\"); }\n";
+        }
         code += "}\n";
 
         if (engine_config.backend == backend_kind_gpu) {
