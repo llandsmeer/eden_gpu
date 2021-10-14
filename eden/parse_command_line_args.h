@@ -104,6 +104,9 @@ void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, M
 		else if(arg == "gcc"){
 			config.use_icc = false;
 		}
+        else if(arg == "single-kernels") {
+            config.skip_combining_consecutive_kernels = true;
+        }
 		
 		else{
 			//unknown, skip it

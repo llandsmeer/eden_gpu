@@ -58,7 +58,8 @@ struct RawTables{
         global_state_tabref = -1;
     }
 
-    void create_consecutive_kernels_vector() {
+    void create_consecutive_kernels_vector(bool debug_mode = false) {
+        // debug_mode doesn't combine kernels - each consecutive kernel is one callback
         consecutive_kernels.clear();
         if (callbacks.size() == 0) return;
         ConsecutiveIterationCallbacks cic;
@@ -66,7 +67,7 @@ struct RawTables{
         cic.n_items = 1;
         cic.callback = callbacks.at(0);
         for (size_t idx = 1; idx < callbacks.size(); idx++) {
-            if (callbacks.at(idx) == cic.callback) {
+            if (callbacks.at(idx) == cic.callback && !debug_mode) {
                 cic.n_items += 1;
             } else {
                 consecutive_kernels.push_back(cic);

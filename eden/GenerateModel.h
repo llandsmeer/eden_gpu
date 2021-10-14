@@ -5082,7 +5082,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 return false;
             }
             compiler_name = "nvcc";
-            basic_flags = "-std=c++11 -lm -Xcompiler -Wall";
+            basic_flags = "-std=c++11 -lm -Xcompiler -Wall,-Wno-attributes,-Wno-unused-variable,-Wno-unused-but-set-variable,-Wno-unused-function";
             dll_flags = " -Xcompiler -fPIC -shared";
             optimization_flags = "";
             fastbuild_flags = "";
@@ -7360,7 +7360,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     engine_config.t_final = engine_config.t_initial + sim.length;
     engine_config.dt = sim.step;
 
-    tabs.create_consecutive_kernels_vector();
+    tabs.create_consecutive_kernels_vector(config.skip_combining_consecutive_kernels);
 
     // yay!
     printf("instantiation complete!\n");
