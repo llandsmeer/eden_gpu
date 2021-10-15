@@ -7,8 +7,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS "YES")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wno-unused-result -lm -g -fopenmp")
 
-include_directories(eden/neuroml)
-
 set(DEFAULT_SOURCES_LIB
         eden/Eden.cpp
         eden/Utils.cpp
@@ -21,15 +19,14 @@ FLEX_TARGET(MyScanner eden/neuroml/LEMS_Expr.lex  ${CMAKE_CURRENT_BINARY_DIR}/le
 ADD_FLEX_BISON_DEPENDENCY(MyScanner MyParser)
 
 SET(RESOURCE_COMPILER xxd)
-SET(OUTPUT_FILE LEMS_CoreComponents.gen.cpp)
+SET(OUTPUT_FILE ${CMAKE_BINARY_DIR}/LEMS_CoreComponents.gen.cpp)
 ADD_CUSTOM_COMMAND(
         OUTPUT ${OUTPUT_FILE}
-        COMMAND ${RESOURCE_COMPILER} -i ${CMAKE_SOURCE_DIR}/eden/neuroml/LEMS_CoreComponents.inc.xml ${OUTPUT_FILE}
+        COMMAND cd ${CMAKE_SOURCE_DIR} && ${RESOURCE_COMPILER} -i eden/neuroml/LEMS_CoreComponents.inc.xml ${OUTPUT_FILE}
         COMMENT "Compiling ${INPUT_FILE} to binary")
 
-add_library(cJSON thirdparty/cJSON-1.7.1/cJSON.c)
-add_library(pugixml thirdparty/pugixml-1.9/pugixml.cpp)
-
+add_library(cJSON ${CMAKE_SOURCE_DIR}/thirdparty/cJSON-1.7.1/cJSON.c)
+add_library(pugixml ${CMAKE_SOURCE_DIR}/thirdparty/pugixml-1.9/pugixml.cpp)
 
 add_executable(eden
         ${DEFAULT_SOURCES_LIB}
@@ -37,26 +34,11 @@ add_executable(eden
         ${FLEX_MyScanner_OUTPUTS}
         ${OUTPUT_FILE}
     )
-
+target_include_directories(eden PUBLIC
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/eden/neuroml
+    ${CMAKE_BINARY_DIR})
 target_link_libraries(eden cJSON pugixml ${CMAKE_DL_LIBS})
 
-# MAKEFILE
-
-#TOOLCHAIN = cc
-#Assuming TOOLCHAIN = gcc...
-#g++ -c eden/Eden.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -fopenmp -o obj/eden.debug.gcc.cpu.o
-#g++ -c eden/Utils.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -o obj/Utils.debug.gcc.cpu.o
-#g++ -c eden/NeuroML.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -o obj/NeuroML.debug.gcc.cpu.o -I.
-#bison --defines=./obj/LEMS_Expr.tab.h --output=./obj/LEMS_Expr.tab.cpp  eden/neuroml/LEMS_Expr.y
-#g++ -c ./obj/LEMS_Expr.tab.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -I ./eden/neuroml/ -o obj/LEMS_Expr.tab.debug.gcc.cpu.o
-#flex -8 --outfile=./obj/LEMS_Expr.yy.cpp --header-file=./obj/LEMS_Expr.yy.h eden/neuroml/LEMS_Expr.lex
-#g++ -c ./obj/LEMS_Expr.yy.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -I ./eden/neuroml/ -o obj/LEMS_Expr.yy.debug.gcc.cpu.o
-#g++ -c eden/neuroml/LEMS_Expr.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -I ./eden/neuroml/ -I ./obj -o obj/LEMS_Expr.debug.gcc.cpu.o
-#ar rcs obj/LEMS_Expr.debug.gcc.cpu.a obj/LEMS_Expr.debug.gcc.cpu.o obj/LEMS_Expr.yy.debug.gcc.cpu.o obj/LEMS_Expr.tab.debug.gcc.cpu.o
-#xxd -i eden/neuroml/LEMS_CoreComponents.inc.xml ./obj/LEMS_CoreComponents.gen.cpp
-#g++ -c ./obj/LEMS_CoreComponents.gen.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -o obj/LEMS_CoreComponents.debug.gcc.cpu.o
-#g++ -c thirdparty/pugixml-1.9/pugixml.cpp -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -o obj/pugixml-1.9.debug.gcc.cpu.o
-#g++ obj/eden.debug.gcc.cpu.o obj/Utils.debug.gcc.cpu.o obj/NeuroML.debug.gcc.cpu.o obj/LEMS_Expr.debug.gcc.cpu.a obj/LEMS_CoreComponents.debug.gcc.cpu.o obj/pugixml-1.9.debug.gcc.cpu.o  -ldl -ldl -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"2021-10-13\"   -g -fopenmp -I ./eden -I . -std=c++14 -fopenmp -o bin/eden.debug.gcc.cpu.x
-#true || true # /usr/bin/ld bin/eden.debug.gcc.cpu.x -headerpad_max_install_names -o bin/eden.debug.gcc.cpu.x
-
-
+install(TARGETS eden 
+    TYPE RUNTIME)
