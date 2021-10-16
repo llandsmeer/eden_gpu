@@ -1,7 +1,45 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+//We should clean this file further
+
+//standart includes
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/time.h>
+#include <stdint.h>
+#include <float.h>
+#include <stddef.h>
+#include <inttypes.h>
+
+//for model representation and more
+#include <cmath> // apparently including <algorithm> undefines ::isfinite() function, on ICC
+#include <vector>
+#include <functional>
+#include <algorithm>
+#include <utility>
+#include <string.h>
+#include <string>
+#include <stdarg.h> //for advanced whining
+#include <unistd.h> //for time & memory usage measurement
+
+
+#if defined (__linux__) || defined(__APPLE__)
+#include <dlfcn.h> // for dynamic loading
+#endif
+
+#ifdef __APPLE__
+// use these lines for non-OSX LATER, if you're targeting an iPad or something you know how to handle the specifics
+// #include <TargetConditionals.h>
+// #if defined(TARGET_OS_OSX) && (TARGET_OS_OSX)
+// ...
+// #endif
+#endif
+
 #ifdef _WIN32
+// for dynamic loading and other OS specific stuff
+// #include <windows.h> // loaded through Common.h at the moment, TODO break out in Windows specific header
 
 // Minimum supported version: Windows XP, aka 5.1
 #define WINVER       0x0501
@@ -16,45 +54,9 @@
 #undef INOUT
 #endif
 
-#ifdef __APPLE__
-// use these lines for non-OSX LATER, if you're targeting an iPad or something you know how to handle the specifics 
-// #include <TargetConditionals.h>
-// #if defined(TARGET_OS_OSX) && (TARGET_OS_OSX)
-// ...
-// #endif
-#endif
-
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <stdint.h>
-#include <float.h>
-#include <stddef.h>
-#include <inttypes.h>
-
-#define _USE_MATH_DEFINES // maybe more elegant LATER, but since it works ...
-#include <cmath> // apparently including <algorithm> undefines ::isfinite() function, on ICC
-
-//for model representation and more
-#include <vector>
-#include <functional>
-#include <algorithm>
-#include <utility>
-#include <string.h>
-#include <string>
-
-//for advanced whining
-#include <stdarg.h>
-
-//for time & memory usage measurement
-#include <unistd.h> 
-
-
 // Non-standard helper routines
 #define pow10(powah) pow(10,(powah))
 #define stricmp strcasecmp
-
 
 //---->> Append to vector helpers
 template< typename Container >
@@ -73,7 +75,6 @@ static void AppendToVector(CAppendTo &append_to, const CAppendThis &append_this)
     }
 };
 
-
 // do not specify alignment for the pointers, in the generic interface
 // cannot specify __restrict__ because it is quietly dropped by compilers ( ! ) when the type is allocated with new
 // causing a type mismatch when operator delete(T * __restrict__) is called (then why didn't they drop __restrict__ from there too ??)
@@ -81,10 +82,24 @@ static void AppendToVector(CAppendTo &append_to, const CAppendThis &append_this)
 typedef float * Table_F32;
 typedef long long * Table_I64;
 
-//------------------> OS-independent utilities
-// May be missing if not suported by platform, though
 
+//------------------> OS-independent utilities
+// implementations can be found in Utils.cpp
+
+// May be missing if not suported by platform, though
 double TimevalDeltaSec(const timeval &start, const timeval &end);
+
+struct Timer {
+    timeval start;
+    Timer() {
+        gettimeofday(&start, 0);
+    }
+    double delta() {
+        timeval end;
+        gettimeofday(&end, 0);
+        return TimevalDeltaSec(start, end);
+    }
+};
 
 
 // Memory measurements on Linux
@@ -116,6 +131,7 @@ struct RunMetaData{
 	}
 
 	void print() {
+
         printf("Config: %.3lf Setup: %.3lf Run: %.3lf \n", config_time_sec, init_time_sec, run_time_sec);
 #ifdef __linux__
         //get memory usage information too
@@ -126,7 +142,6 @@ struct RunMetaData{
 #endif
     }
 };
-
 
 // A very fast and chaotic RNG
 // straight from Wikipedia
@@ -148,7 +163,6 @@ public:
 		return x * 0x2545F4914F6CDD1D;
 	}
 };
-
 
 // Tokenize a string, as with String.split() in string-capable languages
 std::vector<std::string> string_split(const std::string& str, const std::string& delim);

@@ -2,8 +2,8 @@
 // Created by max on 04-10-21.
 //
 
-#include <stdio.h>
-#include <iostream>
+#include <cstdio>
+#include "../thirdparty/miniLogger/miniLogger.h"
 
 #define CUDA_CHECK_RETURN(value) {										\
 	cudaError_t _m_cudaStat = value;									\
@@ -18,21 +18,23 @@
 
 
 bool GPU_checker(){
+    INIT_LOG();
+
     int Amount_of_GPUS_detected = 0;
     CUDA_CHECK_RETURN(cudaGetDeviceCount(&Amount_of_GPUS_detected));
-    std::cout << "amount of gpus detected: " << Amount_of_GPUS_detected << std::endl;
+    log(LOG_INFO) << "amount of gpus detected: " << Amount_of_GPUS_detected << LOG_ENDL;
     //todo
     cudaDeviceProp prop;
     CUDA_CHECK_RETURN(cudaGetDeviceProperties(&prop, 0));
-    std::cout << "      PCI device id:                " << prop.pciBusID << "\n";
-    std::cout << "      Device name:                  " << prop.name << "\n";
-    std::cout << "      Clock Rate (KHz):             " << prop.clockRate << "\n";
-    std::cout << "      Memory Clock Rate (KHz):      " << prop.memoryClockRate << "\n";
-    std::cout << "      Memory Bus Width (bits):      " << prop.memoryBusWidth << "\n";
-    std::cout << "      Peak Memory Bandwidth (GB/s): " << (2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6) << "\n";
-    std::cout << "      Total global memory (Gbytes): " << (prop.totalGlobalMem / 1000000000) << "\n";
-    std::cout << "      Compute cabability :          " << prop.major << "." << prop.minor << "\n";
-    std::cout << "      Number of multiprocessors :   " << prop.multiProcessorCount << " \n";
+    log(LOG_INFO) << "      PCI device id:                " << prop.pciBusID << LOG_ENDL;
+    log(LOG_INFO) << "      Device name:                  " << prop.name << LOG_ENDL;
+    log(LOG_INFO) << "      Clock Rate (KHz):             " << prop.clockRate << LOG_ENDL;
+    log(LOG_INFO) << "      Memory Clock Rate (KHz):      " << prop.memoryClockRate << LOG_ENDL;
+    log(LOG_INFO) << "      Memory Bus Width (bits):      " << prop.memoryBusWidth << LOG_ENDL;
+    log(LOG_INFO) << "      Peak Memory Bandwidth (GB/s): " << (2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8) / 1.0e6) << LOG_ENDL;
+    log(LOG_INFO) << "      Total global memory (Gbytes): " << (prop.totalGlobalMem / 1000000000) << LOG_ENDL;
+    log(LOG_INFO) << "      Compute cabability :          " << prop.major << "." << prop.minor << LOG_ENDL;
+    log(LOG_INFO) << "      Number of multiprocessors :   " << prop.multiProcessorCount << LOG_ENDL;
     return true;
 }
 
