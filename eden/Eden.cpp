@@ -55,9 +55,9 @@ int main(int argc, char **argv){
     parse_command_line_args(argc, argv, engine_config, config, model, metadata.config_time_sec);
 
 //-----> Find and check the specific engine_config
-    setup_mpi(argc, argv);              //check if everything works fine, sorry if you use legacy cmd line args
+    setup_mpi(argc, argv, &engine_config);         //check if everything works fine, sorry if you use legacy cmd line args
     if (engine_config.backend == backend_kind_gpu) {
-        setup_gpu(engine_config);       //same for gpu
+        setup_gpu(engine_config);                   //same for gpu
     }
 
 //-----> Init the backend

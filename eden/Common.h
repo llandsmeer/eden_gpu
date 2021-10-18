@@ -14,6 +14,7 @@
 #include <inttypes.h>
 
 //for model representation and more
+#include <climits>  //for INT_MAX
 #include <cmath> // apparently including <algorithm> undefines ::isfinite() function, on ICC
 #include <vector>
 #include <functional>
