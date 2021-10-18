@@ -10,22 +10,12 @@
 #include "GeomHelp_Base.h"
 #include "StringHelpers.h"
 
-// smuggle int32 into f32 position
-// dodgy, but that's life
-union TypePun_I32F32{
-    int32_t i32; float f32;
-    static_assert( sizeof(i32) == sizeof(f32), "Single-precision float must have same same size as int32_t for type punning to work" );
-};
-auto EncodeI32ToF32( int32_t i ){
-    TypePun_I32F32 cast;
-    cast.i32 = i;
-    return cast.f32;
-}
-auto EncodeF32ToI32( float f ){
-    TypePun_I32F32 cast;
-    cast.f32 = f;
-    return cast.i32;
-}
+//why is this confilicting ?
+#include "TypePun.h"
+
+#ifdef USE_MPI
+    #include "Mpi_helpers.h"
+#endif
 
 bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConfig &engine_config, RawTables &tabs){
 
@@ -1856,7 +1846,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // TODO something more elegant to compile the actual code kernels:
         // dry run, or synchronization to use the same files(beware of distributed file systems !)
 #ifdef USE_MPI
-        sig.name += "_rank_"+itos(my_mpi.rank);
+        sig.name += "_rank_"+itos(engine_config.my_mpi.rank);
 #endif
 
         printf("\nAnalyzing %s...:\n", sig.name.c_str());
@@ -5097,7 +5087,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 return false;
             }
             compiler_name = "nvcc";
-            basic_flags = "-std=c++11 -lm -Xcompiler -Wall,-Wno-attributes,-Wno-unused-variable,-Wno-unused-but-set-variable,-Wno-unused-function";
+            //basic_flags = "-std=c++11 -lm -Xcompiler -Wall,-Wno-attributes,-Wno-unused-variable,-Wno-unused-but-set-variable,-Wno-unused-function";
+            basic_flags = "-std=c++11 -lm -Xcompiler -Wall,-Wno-attributes,-Wno-unused-variable,-Wno-unused-but-set-variable,-Wno-unused-function -Xcudafe --diag_suppress=177";
             dll_flags = " -Xcompiler -fPIC -shared";
             optimization_flags = "";
             fastbuild_flags = "";
@@ -5711,7 +5702,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         }
     };
 
-    NodeMapper to_node( my_mpi.world_size, total_neurons );
+    NodeMapper to_node(engine_config.my_mpi.world_size, total_neurons );
 #endif
 
     timeval time_pops_start, time_pops_end;
@@ -5736,7 +5727,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             neuron_gid_per_cell_per_population[pop_seq][inst_seq] = current_neuron_gid;
             neuron_gid_to_node[current_neuron_gid] = on_node;
 
-            if( on_node == my_mpi.rank ) instantiate_this = true;
+            if( on_node == engine_config.my_mpi.rank ) instantiate_this = true;
             else instantiate_this = false;
 
 #endif
@@ -6432,7 +6423,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             if( work_unit_seg < 0 ){
                 #ifdef MPI
-                assert( my_mpi.rank == 0 );
+                assert(engine_config.my_mpi.rank == 0 );
                 #endif
 
                 int remote_node = ~(work_unit_seg);
@@ -6687,7 +6678,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     bool i_log_the_data = true;
 
 #ifdef USE_MPI
-    if( my_mpi.rank == 0 ){
+    if(engine_config.my_mpi.rank == 0 ){
 
         i_log_the_data = true;
         // form the data structures, send requests for whatever is remote
@@ -7346,7 +7337,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // right next, the daw values
         for( const auto &daw_ref : recv_list.daw_refs ){
 
-            assert(my_mpi.rank == 0);
+            assert(engine_config.my_mpi.rank == 0);
 
             engine_config.trajectory_loggers[daw_ref.daw_seq].columns[daw_ref.col_seq].entry = value_mirror_entry;
 

@@ -51,8 +51,8 @@ int main(int argc, char **argv){
     MpiBuffers *mpi_buffers = nullptr;              // Class to handle all MPI communication
 
 //-----> Find and check the specific engine_config
-    setup_mpi(argc, argv);              //check if everything works fine
-    setup_gpu(engine_config);           //same for gpu
+    setup_mpi(argc, argv, &engine_config);              //check if everything works fine
+    setup_gpu(engine_config);                           //same for gpu
 
 //-----> Check the command line input with options
     log(LOG_MES) << "Parse command lines and Build model"<< LOG_ENDL;
