@@ -7,14 +7,13 @@
 
 #include "../../AbstractBackend.h"
 
-
 class GpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;
 public:
     /* Pure CPU implementation just refers to existing state buffers */
 //    Init function
 
-    ~GpuBackend(){
+    ~GpuBackend() override{
         delete state;
     }
     void init() override {
@@ -58,7 +57,15 @@ public:
         exit(2);
 #endif
     };
+    void synchronize() const override {
+#ifdef USE_GPU
+        synchronize_gpu();
+#else
+        printf("NOOOOOO!!\n");
+        exit(2);
+#endif
 
+    };
     void swap_buffers() override {
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
@@ -89,6 +96,7 @@ public:
 #ifdef USE_GPU
     void execute_work_gpu(EngineConfig & engine_config, SimulatorConfig & config, int step, double time);
     bool copy_data_to_device();
+    static void synchronize_gpu();
 #endif
 
 private:

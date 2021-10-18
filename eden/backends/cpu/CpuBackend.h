@@ -13,7 +13,7 @@ public:
     /* Pure CPU implementation just refers to existing state buffers */
 //    Init function
 
-    ~CpuBackend(){
+    ~CpuBackend() override{
         delete state;
     }
     void init() override {
@@ -63,6 +63,9 @@ public:
         execute_work_items_one_by_one(engine_config, config, step, time);
 //        execute_work_items_as_consecutives(engine_config, config, step, time);
     }
+    void synchronize() const override{
+       //nothing to be done yet
+    }
     void execute_work_items_one_by_one(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) {
         //prepare for parallel iteration
         const float dt = engine_config.dt;
@@ -104,7 +107,6 @@ public:
             }
         }
     }
-
     void execute_work_items_as_consecutives(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) {
         //prepare for parallel iteration
         const float dt = engine_config.dt;
@@ -150,7 +152,6 @@ public:
             }
         }
     }
-
     void swap_buffers() override {
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
