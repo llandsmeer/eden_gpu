@@ -110,6 +110,7 @@ runEden(...)
 ## Command line flags
 
  - `gpu` : run with GPU / CUDA backend
+ - `threads_per_block <int>` : set CUDA threads per block
  - `nml <neuroml file>` : set the NeuroML model file (mandatory)
  - `cable_solver <fwd_euler|bwd_euler|auto>`
  - `debug_gpu_kernels` : to enable `-G` flag in nvcc kernel generation

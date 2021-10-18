@@ -15,7 +15,7 @@
 		exit(1);														\
 	} }
 
-void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time) {
+void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time, int threads_per_block) {
     const float dt = engine_config.dt;
     for (size_t idx = 0; idx < tabs.consecutive_kernels.size(); idx++) {
 
@@ -51,7 +51,8 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
                           m_global_state_now,
                           m_global_state_next,
                           m_global_state_f32_index,
-                          step
+                          step,
+                          threads_per_block
             );
 
         if(config.debug){

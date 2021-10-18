@@ -139,6 +139,23 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
         else if(arg == "gpu") {
             engine_config.backend = backend_kind_gpu;
         }
+        else if(arg == "threads_per_block") {
+            if(i == argc - 1){
+                log(LOG_ERR) << "cmdline: "<<  arg.c_str() << "value missing" << LOG_ENDL;
+                exit(1);
+            }
+            const std::string stpb = argv[i+1];
+            int threads_per_block;
+            if( sscanf( stpb.c_str(), "%d", &threads_per_block ) == 1 ){
+                engine_config.threads_per_block = threads_per_block;
+            }
+            else{
+                log(LOG_ERR) <<"cmdline: "<< arg.c_str() <<" must be a reasonably-sized integer, not " << stpb.c_str() << LOG_ENDL;
+                exit(1);
+            }
+
+            i++; // used following token too
+        }
 		else{
 			//unknown, skip it
             log(LOG_WARN) << "cmdline: skipping unknow token " << argv[i] << LOG_ENDL;

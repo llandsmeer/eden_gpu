@@ -51,7 +51,7 @@ public:
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override{
 #ifdef USE_GPU
-        execute_work_gpu(engine_config,config, step, time);
+        execute_work_gpu(engine_config,config, step, time, engine_config.threads_per_block);
 #else
         printf("NOOOOOO!!\n");
         exit(2);
@@ -94,7 +94,7 @@ public:
     }
 
 #ifdef USE_GPU
-    void execute_work_gpu(EngineConfig & engine_config, SimulatorConfig & config, int step, double time);
+    void execute_work_gpu(EngineConfig & engine_config, SimulatorConfig & config, int step, double time, int threads_per_block);
     bool copy_data_to_device();
     static void synchronize_gpu();
 #endif

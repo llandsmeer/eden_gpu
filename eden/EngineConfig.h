@@ -58,6 +58,7 @@ struct EngineConfig{
 	double t_final;
 	float dt; // in engine time units
     backend_kind backend = backend_kind_cpu;
+    int threads_per_block = 32;
 
 	std::vector<TrajectoryLogger> trajectory_loggers;
 	
