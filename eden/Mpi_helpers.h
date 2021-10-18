@@ -60,6 +60,8 @@ struct MpiBuffers {
     std::vector<MPI_Request> send_requests;
     std::vector<MPI_Request> recv_requests;
 
+    bool enabled() const { return true; }
+
     // recv's have to be probed before recv'ing
     std::vector<bool> received_probes;
     std::vector<bool> received_sends;
@@ -259,6 +261,7 @@ struct MpiBuffers {
     MpiBuffers(EngineConfig & engine_config) {}
     void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
     void finish_communicate() {}
+    bool enabled() const { return false; }
 };
 #endif
 #endif

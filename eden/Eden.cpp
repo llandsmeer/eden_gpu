@@ -121,7 +121,8 @@ int main(int argc, char **argv){
             //dont check on initializing check on step < 0
             if (!initializing) {
                 trajectory_logger->write_output_logs(engine_config, time,
-                                                    backend->global_state_now(), /* needed on mpi???: */backend->global_tables_stateNow_f32());
+                                                    backend->global_state_now(),
+                                                    /* needed on mpi???: */mpi_buffers->enabled() ? backend->global_tables_stateNow_f32() : 0);
             }
 
             //dump to CMD CLI
