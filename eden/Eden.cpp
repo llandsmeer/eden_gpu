@@ -50,24 +50,24 @@ int main(int argc, char **argv){
     TrajectoryLogger *trajectory_logger = nullptr;  // Class to handle all output generation
     MpiBuffers *mpi_buffers = nullptr;              // Class to handle all MPI communication
 
-//-----> Find and check the specific engine_config
-    setup_mpi(argc, argv);              //check if everything works fine
-    setup_gpu(engine_config);           //same for gpu
-
 //-----> Check the command line input with options
     log(LOG_MES) << "Parse command lines and Build model"<< LOG_ENDL;
-    parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
+    parse_command_line_args(argc, argv, engine_config, config, model, metadata.config_time_sec);
+
+//-----> Find and check the specific engine_config
+    setup_mpi(argc, argv);              //check if everything works fine, sorry if you use legacy cmd line args
+    if (engine_config.backend == backend_kind_gpu) {
+        setup_gpu(engine_config);       //same for gpu
+    }
 
 //-----> Init the backend
     log(LOG_MES) << "Initializing backend... "<< LOG_ENDL;
     {
-#ifdef USE_GPU
-        log(LOG_INFO) << "USING BACKEND GPU" << LOG_ENDL;
-        engine_config.backend = backend_kind_gpu;
-#else
-        log(LOG_INFO) << "USING BACKEND CPU" << LOG_ENDL;
-        engine_config.backend = backend_kind_cpu;
-#endif
+        if (engine_config.backend == backend_kind_gpu) {
+            log(LOG_INFO) << "USING BACKEND GPU" << LOG_ENDL;
+        } else {
+            log(LOG_INFO) << "USING BACKEND CPU" << LOG_ENDL;
+        }
         if (engine_config.backend == backend_kind_cpu) {
             backend = new CpuBackend();
         } else if (engine_config.backend == backend_kind_gpu) {

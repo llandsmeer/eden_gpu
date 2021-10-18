@@ -21,7 +21,7 @@ void print_eden_cli_header() {
     log(LOG_INFO) << "Build version " <<  BUILD_STAMP  << LOG_ENDL;
 }
 
-void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, Model & model, double & config_time_sec) {
+void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_config, SimulatorConfig & config, Model & model, double & config_time_sec) {
 	INIT_LOG();
     timeval config_start, config_end;
 	gettimeofday(&config_start, NULL);
@@ -135,6 +135,9 @@ void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, M
         }
         else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
+        }
+        else if(arg == "gpu") {
+            engine_config.backend = backend_kind_gpu;
         }
 		else{
 			//unknown, skip it

@@ -3,8 +3,9 @@
 
 #include "NeuroML.h"
 #include "SimulatorConfig.h"
+#include "EngineConfig.h"
 
 void print_eden_cli_header();
-void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, Model & model, double & config_time_sec);
+void parse_command_line_args(int argc, char ** argv, EngineConfig & engineConfig, SimulatorConfig & config, Model & model, double & config_time_sec);
 
 #endif

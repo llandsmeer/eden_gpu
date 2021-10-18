@@ -28,8 +28,9 @@ def system(cmd, gpu=False, submit=True):
 
 final = []
 
-def verify(toolchain, nmlfile, output, target):
-    system(f'bin/eden.debug.{toolchain}.cpu.x nml {nmlfile}', gpu=toolchain=='nvcc', submit=True)
+def verify(nmlfile, output, target, gpu=True):
+    system(f'build/eden {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
+    toolchain = "GPU" if gpu else "CPU"
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
     out = pd.read_csv(output, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
@@ -60,14 +61,11 @@ def verify(toolchain, nmlfile, output, target):
         final.append(msg)
         print(msg)
 
-toolchains = ["gcc", "nvcc"]
-
-for toolchain in toolchains:
-    system(f'rm -f results1.txt')
-    system(f'make clean TOOLCHAIN={toolchain}')
-    system(f'make eden TOOLCHAIN={toolchain}')
-    verify(toolchain, 'examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt')
-    verify(toolchain, 'examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt')
+system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake ..; make -j 2"')
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
 
 print('(-- logs repeated here --)')
 for msg in final:
