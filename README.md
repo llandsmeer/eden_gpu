@@ -107,6 +107,24 @@ os.environ["PATH"] = <path to compiler executable> + os.pathsep + os.environ["PA
 runEden(...)
 ```
 
+## Command line flags
+
+ - `gpu` : run with GPU / CUDA backend
+ - `nml <neuroml file>` : set the NeuroML model file (mandatory)
+ - `cable_solver <fwd_euler|bwd_euler|auto>`
+ - `debug_gpu_kernels` : to enable `-G` flag in nvcc kernel generation
+ - `icc` : switch to intel compiler for work item compilation
+ - `single-kernels` : do not combine work items
+ - `syscall-guard` : put `syscall(400)` at work item start and `syscall(401)` at work item end for memory tracing
+ - `dump_array_locations` : print work item location, byte size, item byte size
+ - `rng_seed <number>`
+ - `verbose`
+ - `full_dump`
+ - `dump_state_scaler`
+ - `dump_raw_layout`
+ - `debug`
+ - `debug_netcode_
+
 ## Dockerfile
 
 A demonstration-ready Docker image is available, using the Dockerfile on this top-level directory.

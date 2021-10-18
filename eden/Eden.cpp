@@ -18,48 +18,27 @@ Parallel simulation engine for ODE-based models
 */
 
 //standard libs
-#include <cmath>
-
-#if defined (__linux__) || defined(__APPLE__)
-#include <dlfcn.h> // for dynamic loading
-#endif
-
-#ifdef _WIN32
-// for dynamic loading and other OS specific stuff
-// #include <windows.h> // loaded through Common.h at the moment, TODO break out in Windows specific header
-#endif
 
 // Local includes
 #include "Common.h"
 #include "NeuroML.h"
 #include "MMMallocator.h"
-
-//clean
 #include "GPU_helpers.h"
-#include "Timer.h"
 #include "backends/cpu/CpuBackend.h"
 #include "backends/gpu/GpuBackend.h"
-
-// mess to clean up
-#include "FixedWidthNumberPrinter.h"
-#include "GeomHelp_Base.h"
-#include "TypePun.h"
+#include "GenerateModel.h"
 #include "EngineConfig.h"
 #include "SimulatorConfig.h"
-#include "GenerateModel.h"
 #include "Mpi_helpers.h"
 #include "TrajectoryLogger.h"
 #include "parse_command_line_args.h"
-#include "print_eden_cli_header.h"
+#include "../thirdparty/miniLogger/miniLogger.h"
 
 int main(int argc, char **argv){
+    INIT_LOG();
 
 //-----> Starting the simulator
-    {
-//        setvbuf(stdout, NULL, _IONBF, 0); // first of all, set stdout,stderr to Unbuffered, for live output
-//        setvbuf(stderr, NULL, _IONBF, 0); // this action must happen before any output is written !
-        print_eden_cli_header();          // To print the CLI header
-    }
+    print_eden_cli_header();          // To print the CLI header
 
 //-----> declaration of all used variables
     RunMetaData metadata;             // Struct for keeping track of non backend specific meta data
@@ -71,45 +50,45 @@ int main(int argc, char **argv){
     TrajectoryLogger *trajectory_logger = nullptr;  // Class to handle all output generation
     MpiBuffers *mpi_buffers = nullptr;              // Class to handle all MPI communication
 
-//-----> Find and check the specific engine_config
-    setup_mpi(argc, argv);              //check if everything works fine
-    setup_gpu(engine_config);           //same for gpu
-
 //-----> Check the command line input with options
-    parse_command_line_args(argc, argv, config, model, metadata.config_time_sec);
+    log(LOG_MES) << "Parse command lines and Build model"<< LOG_ENDL;
+    parse_command_line_args(argc, argv, engine_config, config, model, metadata.config_time_sec);
+
+//-----> Find and check the specific engine_config
+    setup_mpi(argc, argv, &engine_config);         //check if everything works fine, sorry if you use legacy cmd line args
+    if (engine_config.backend == backend_kind_gpu) {
+        setup_gpu(engine_config);                   //same for gpu
+    }
 
 //-----> Init the backend
-#ifdef USE_GPU
-    puts("USING BACKEND GPU");
-    engine_config.backend = backend_kind_gpu;
-#else
-    puts("USING BACKEND CPU");
-    engine_config.backend = backend_kind_cpu;
-#endif
-
-    printf("Initializing backend...\n");
+    log(LOG_MES) << "Initializing backend... "<< LOG_ENDL;
     {
+        if (engine_config.backend == backend_kind_gpu) {
+            log(LOG_INFO) << "USING BACKEND GPU" << LOG_ENDL;
+        } else {
+            log(LOG_INFO) << "USING BACKEND CPU" << LOG_ENDL;
+        }
         if (engine_config.backend == backend_kind_cpu) {
             backend = new CpuBackend();
-        } else if (engine_config.backend == backend_kind_gpu){
+        } else if (engine_config.backend == backend_kind_gpu) {
             backend = new GpuBackend();
-        }
-        else {
-            printf("No valid backed selected");
+        } else {
+            log(LOG_ERR)<< "No valid backed selected" <<LOG_ENDL;
             exit(10);
         }
     }
 
 //----> Initialize the backend
-    printf("Initializing model...\n");
+    log(LOG_MES) << "Initializing model... "<< LOG_ENDL;
     {
         Timer init_timer;
         if (!GenerateModel(model, config, engine_config, backend->tabs)) {
-            printf("NeuroML model could not be created\n");
+            log(LOG_ERR) << "NeuroML model could not be created\n" << LOG_ENDL;
             exit(1);
         }
         trajectory_logger = new TrajectoryLogger(engine_config); //To log results
-        printf("Allocating state buffers...\n");
+
+        log(LOG_INFO) << "Allocating state buffers..." << LOG_ENDL;
         backend->init();
 
         //just some timer functions to time this meta data --> encorperate this into meta data class
@@ -123,7 +102,7 @@ int main(int argc, char **argv){
     }
 
 //----> Simulations loop
-    printf("Starting simulation loop...\n");
+    log(LOG_MES) << "Starting simulation loop..."<< LOG_ENDL;
     {
         Timer run_timer;
         double time = engine_config.t_initial;

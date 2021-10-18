@@ -1,55 +1,54 @@
+#ifndef EDEN_MPI_HELPERS_H
+#define EDEN_MPI_HELPERS_H
+
 #include "EngineConfig.h"
 #include "StateBuffers.h"
 
 #ifdef USE_MPI
+#include "TypePun.h"
 #include <mpi.h>
-// MPI context, just a few globals like world size, rank etc.
-struct MpiContext{
-	int world_size;
-	int rank;
-};
-const int MYMPI_TAG_BUF_SEND = 99;
-MpiContext my_mpi;
 
-// TODO use logging machinery in whole codebase
-FILE *fLog = stdout;
-void Say( const char *format, ... ){
+//    TODO HIER
+// MPI context, just a few globals like world size, rank etc.
+static void Say(const char *format, ... ){
+    FILE *fLog = stdout;
 	va_list args;
 	va_start(args, format);
-
-	std::string new_format = "rank "+std::to_string(my_mpi.rank)+" : " + format + "\n";
+	int dit;
+	MPI_Comm_rank(MPI_COMM_WORLD, &dit);
+    std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
 	vfprintf(fLog, new_format.c_str(), args);
 	fflush(stdout);
-
 	va_end (args);
 }
 #endif
 
-void setup_mpi(int & argc, char ** & argv) {
+static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
 #ifdef USE_MPI
     // first of first of all, replace argc and argv
 	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
 	MPI_Init(&argc, &argv);
 	// Get the number of processes
-    MPI_Comm_size(MPI_COMM_WORLD, &my_mpi.world_size);
+    MPI_Comm_size(MPI_COMM_WORLD, &Engine->my_mpi.world_size);
     // Get the rank of the process
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_mpi.rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &Engine->my_mpi.rank);
 	char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
 
 	if(1){
-		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, my_mpi.rank, my_mpi.world_size);
+		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
 
-		if( my_mpi.rank != 0 ){
+		if( Engine->my_mpi.rank != 0 ){
 			char tmps[555];
-			sprintf(tmps, "log_node_%d.gen.txt", my_mpi.rank);
+			sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
 			freopen(tmps,"w",stdout);
 			stderr = stdout;
 		}
 	}
 #endif
 }
+
 
 #ifdef USE_MPI
 struct MpiBuffers {
@@ -60,6 +59,7 @@ struct MpiBuffers {
     std::vector< SendRecvBuf > recv_bufs;
     std::vector<MPI_Request> send_requests;
     std::vector<MPI_Request> recv_requests;
+
     // recv's have to be probed before recv'ing
     std::vector<bool> received_probes;
     std::vector<bool> received_sends;
@@ -83,11 +83,11 @@ struct MpiBuffers {
         }
     }
 
-    void init_communicate(EngineConfig & engine_config, StateBuffers & state, SimulatorConfig & config) {
-        float * global_state_now = state.state_one.data();
-        Table_F32 *global_tables_stateNow_f32  = state.global_tables_stateOne_f32_arrays.data();
-        Table_I64 *global_tables_stateNow_i64  = state.global_tables_stateOne_i64_arrays.data();
-        long long * global_tables_state_i64_sizes = state.global_tables_state_i64_sizes.data();
+    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {
+        float * global_state_now = state->state_one.data();
+        Table_F32 *global_tables_stateNow_f32  = state->global_tables_stateOne_f32_arrays.data();
+        Table_I64 *global_tables_stateNow_i64  = state->global_tables_stateOne_i64_arrays.data();
+        long long * global_tables_state_i64_sizes = state->global_tables_state_i64_sizes.data();
 
         auto NetMessage_ToString = []( size_t buf_value_len, const auto &buf ){
             std::string str;
@@ -129,7 +129,7 @@ struct MpiBuffers {
             }
 
             for( size_t i = 0; i < sendlist_impl.daw_columns.size(); i++ ){
-                assert( my_mpi.rank != 0 && other_rank == 0 );
+                assert( engine_config.my_mpi.rank != 0 && other_rank == 0 );
                 auto &col = sendlist_impl.daw_columns[i];
                 size_t off = col.entry;
                 // also apply scaling, so receiving node won't bother
@@ -260,4 +260,5 @@ struct MpiBuffers {
     void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
     void finish_communicate() {}
 };
+#endif
 #endif

@@ -15,10 +15,8 @@
 		exit(1);														\
 	} }
 
-
 void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time) {
     const float dt = engine_config.dt;
-
     for (size_t idx = 0; idx < tabs.consecutive_kernels.size(); idx++) {
 
         if(config.debug){
@@ -61,14 +59,39 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
             fflush(stdout);
         }
     }
+}
 
-    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
-    return;
+float * GpuBackend::global_state_now() const {
+    CUDA_CHECK_RETURN(cudaMemcpy(
+            state->state_one.data(),
+            m_global_state_now,
+            state->state_one.size()*sizeof(state->state_one[0]),
+            cudaMemcpyDeviceToHost));
+    return state->state_one.data();
+}
+
+Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {
+    // here be dragons
+    // XXX TODO: remove temp allocation - we can just keep the temp_f32 vector from allocation
+    // XXX TODO: call this function only when using MPI
+    // Also, state->global_tables_stateOne_f32_arrays points to state->state_one in some way
+    // leading to overwrites in certain cases, but not others (?)
+    std::vector<float*> temp(state->global_tables_stateTwo_f32_arrays.size(), 0); CUDA_CHECK_RETURN(cudaMemcpy( temp.data(),
+            m_global_tables_stateNow_f32,
+            temp.size()*sizeof(float*),
+            cudaMemcpyDeviceToHost));
+    for (size_t i = 0; i < temp.size(); i++) {
+        size_t size = state->global_tables_state_f32_sizes[i];
+        CUDA_CHECK_RETURN(cudaMemcpy(
+                state->global_tables_stateTwo_f32_arrays[i],
+                temp[i],
+                size*sizeof(float),
+                cudaMemcpyDeviceToHost));
+    }
+    return state->global_tables_stateTwo_f32_arrays.data();
 }
 
 bool GpuBackend::copy_data_to_device() {
-    printf("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-
     // alloc simple
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_constants, tabs.global_constants.size()*sizeof(tabs.global_constants[0])));
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_const_f32_index, tabs.global_const_f32_index.size()*sizeof(tabs.global_const_f32_index[0])));
@@ -106,7 +129,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_f32, state->global_tables_stateOne_f32_arrays.size()*sizeof(state->global_tables_stateOne_f32_arrays[0]))); // state->global_tables_state_f32_sizes.data()
     for (size_t i = 0; i < state->global_tables_stateOne_f32_arrays.size(); i++) {
         size_t size = state->global_tables_state_f32_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         float * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
@@ -118,7 +140,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_f32, state->global_tables_stateTwo_f32_arrays.size()*sizeof(state->global_tables_stateTwo_f32_arrays[0]))); // state->global_tables_state_f32_sizes.data()
     for (size_t i = 0; i < state->global_tables_stateTwo_f32_arrays.size(); i++) {
         size_t size = state->global_tables_state_f32_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         float * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
@@ -130,7 +151,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_f32_arrays, state->global_tables_const_f32_arrays.size()*sizeof(state->global_tables_const_f32_arrays[0]))); // state->global_tables_const_f32_sizes.data()
     for (size_t i = 0; i < state->global_tables_const_f32_arrays.size(); i++) {
         size_t size = state->global_tables_const_f32_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         float * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(float)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_f32_arrays[i], size*sizeof(float), cudaMemcpyHostToDevice));
@@ -143,7 +163,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNow_i64, state->global_tables_stateOne_i64_arrays.size()*sizeof(state->global_tables_stateOne_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data(),
     for (size_t i = 0; i < state->global_tables_stateOne_i64_arrays.size(); i++) {
         size_t size = state->global_tables_state_i64_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         long long * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateOne_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
@@ -155,7 +174,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_stateNext_i64, state->global_tables_stateTwo_i64_arrays.size()*sizeof(state->global_tables_stateTwo_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data(),
     for (size_t i = 0; i < state->global_tables_stateTwo_i64_arrays.size(); i++) {
         size_t size = state->global_tables_state_i64_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         long long * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_stateTwo_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
@@ -167,7 +185,6 @@ bool GpuBackend::copy_data_to_device() {
     CUDA_CHECK_RETURN(cudaMalloc(&m_global_tables_const_i64_arrays, state->global_tables_const_i64_arrays.size()*sizeof(state->global_tables_const_i64_arrays[0]))); // state->global_tables_state_i64_sizes.data()
     for (size_t i = 0; i < state->global_tables_const_i64_arrays.size(); i++) {
         size_t size = state->global_tables_const_i64_sizes[i];
-        printf("Allocating subarray %d of size %lld\n", i, (long long)size);
         long long * item_ptr;
         CUDA_CHECK_RETURN(cudaMalloc(&item_ptr, size*sizeof(long long)));
         CUDA_CHECK_RETURN(cudaMemcpy(item_ptr, state->global_tables_const_i64_arrays[i], size*sizeof(long long), cudaMemcpyHostToDevice));
@@ -179,34 +196,6 @@ bool GpuBackend::copy_data_to_device() {
     return true;
 }
 
-float * GpuBackend::global_state_now() const {
-    CUDA_CHECK_RETURN(cudaMemcpy(
-                state->state_one.data(),
-                m_global_state_now,
-                state->state_one.size()*sizeof(state->state_one[0]),
-                cudaMemcpyDeviceToHost));
-    return state->state_one.data();
-}
-
-Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {
-    // here be dragons
-    // XXX TODO: remove temp allocation - we can just keep the temp_f32 vector from allocation
-    // XXX TODO: call this function only when using MPI
-    // Also, state->global_tables_stateOne_f32_arrays points to state->state_one in some way
-    // leading to overwrites in certain cases, but not others (?)
-    std::vector<float*> temp(state->global_tables_stateTwo_f32_arrays.size(), 0);
-    CUDA_CHECK_RETURN(cudaMemcpy(
-                temp.data(),
-                m_global_tables_stateNow_f32,
-                temp.size()*sizeof(float*),
-                cudaMemcpyDeviceToHost));
-    for (size_t i = 0; i < temp.size(); i++) {
-        size_t size = state->global_tables_state_f32_sizes[i];
-        CUDA_CHECK_RETURN(cudaMemcpy(
-                    state->global_tables_stateTwo_f32_arrays[i],
-                    temp[i],
-                    size*sizeof(float),
-                    cudaMemcpyDeviceToHost));
-    }
-    return state->global_tables_stateTwo_f32_arrays.data();
+void  GpuBackend::synchronize_gpu() {
+    CUDA_CHECK_RETURN(cudaDeviceSynchronize());
 }

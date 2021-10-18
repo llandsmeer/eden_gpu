@@ -7032,7 +7032,7 @@ struct ImportState{
 
 //Top-level NeuroML import routine
 bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simulation, FILE *info_log, FILE *error_log){
-	
+
 	bool ok = false;
 	fprintf(info_log, "Starting import from NeuroML file %s\n", top_level_filename);
 	

@@ -12,14 +12,19 @@ struct SimulatorConfig{
 	
 	bool debug;
 	bool debug_netcode;
+    bool debug_gpu_kernels = false;
 	
 	bool dump_raw_state_scalar;
 	bool dump_raw_state_table;
 	bool dump_raw_layout;
+    bool dump_array_locations = false;
 	
 	bool use_icc;
 	bool tweak_lmvec;
 	bool output_assembly;
+
+    bool skip_combining_consecutive_kernels = false;
+    bool syscall_guard_callback = false;
 	
 	// TODO knobs:
 	// vector vs.hardcoded sequence for bwd euler, also heuristic

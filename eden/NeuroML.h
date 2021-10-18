@@ -3,13 +3,13 @@
 #define NEUROML_H
 
 #include "Common.h"
-
 #include "neuroml/LEMS_Expr.h"
 
 #include <map>
 #include <unordered_map>
 #include <set>
 #include <list>
+
 
 // set up a namespace LATER
 
