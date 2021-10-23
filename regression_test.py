@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 PLOT_ON_FAILURE = False
-TEST_MPI = False
+TEST_MPI = True
 
 class bcolors:
     HEADER = '\033[95m'
@@ -16,31 +16,40 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 
-def system(cmd, gpu=False, submit=True):
+def system(cmd, gpu=False, submit=True, nmpi=None, exit_on_failure=True):
     if os.path.exists('/opt/ibm/spectrum_mpi/jsm_pmix/bin/jsrun') and submit:
-        if gpu:
-            job = 'jsrun -g2 -c42 -n1'
+        if nmpi is None:
+            if gpu:
+                job = 'jsrun -g2 -c42 -n1'
+            else:
+                job = 'jsrun -c42 -n1'
         else:
-            job = 'jsrun -c42 -n1'
+            if gpu:
+                job = 'jsrun -g{nmpi} -c42 -a{nmpi} -n1'
+            else:
+                job = 'jsrun -c42 -a{nmpi} -n1'
+    elif nmpi is not None:
+        pre = f'mpirun -np {nmpi}'
         cmd = f'{job} {cmd}'
     print(f'{bcolors.HEADER}Executing {cmd}{bcolors.ENDC}')
     status = os.system(cmd)
     if status != 0:
-        print(f'{bcolors.FAIL}FAILED, exit code = {status}{bcolors.ENDC}')
-        exit(status)
+        exec_failed = f'{bcolors.FAIL}FAILED, exit code = {status}{bcolors.ENDC}'
+        if exit_on_failure:
+            exit(status)
 
 final = []
 
 def verify(nmlfile, output, target, gpu=True, nmpi=None):
-    if nmpi is not None:
-        pre = f'mpirun -np {nmpi}'
-    else:
-        pre = ''
-    system(f'{pre} build/eden {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
     toolchain = "GPU" if gpu else "CPU"
     testcase = toolchain
     if nmpi is not None:
         testcase = testcase+f'/mpi={nmpi}'
+
+    exec_failed = system(f'build/eden {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True, exit_on_failure=False)
+    if exec_failed:
+        final.append(exec_failed.replace('FAILED', f'{testcase} FAILED'))
+        return
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
     out = pd.read_csv(output, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
