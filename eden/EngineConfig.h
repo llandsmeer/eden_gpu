@@ -2,11 +2,13 @@
 #define ENGINECONFIG_H
 
 #include "TableEntry.h"
-#include "map"
+#include <map>
 
 extern "C" {
 
 typedef uint32_t backend_kind;
+const int MYMPI_TAG_BUF_SEND = 99;
+
 #define backend_kind_nil 0
 #define backend_kind_cpu 1
 #define backend_kind_gpu 2
@@ -45,12 +47,18 @@ struct EngineConfig{
 		std::vector<LogColumn> columns;
 		
 	};
+    struct MpiContext{
+        int world_size;
+        int rank;
+    };
 
+    MpiContext my_mpi;
 	long long work_items;
 	double t_initial; // in engine time units
 	double t_final;
 	float dt; // in engine time units
     backend_kind backend = backend_kind_cpu;
+    int threads_per_block = 32;
 
 	std::vector<TrajectoryLogger> trajectory_loggers;
 	

@@ -147,7 +147,7 @@ TOOLCHAIN_LIBS_PATH ?= /usr/local/
 # Compiler flags
 # TODO more optimization flags
 ifneq "$(TOOLCHAIN)" "nvcc"
-	CFLAGS_basic := -Wall -Werror -Wno-unused-result -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra} 
+	CFLAGS_basic := -Wall -Werror -Wno-unused-result -Wno-unused-function -lm -DBUILD_STAMP=\"$(BUILD_STAMP)\" ${CFLAGS_extra}
 	CFLAGS_release := ${CFLAGS_basic} -O3
 	CFLAGS_debug := ${CFLAGS_basic} -g
 
@@ -204,9 +204,16 @@ all: clean ${TARGETS} test
 
 # TODO add a build without OpenMP, to debug OpenMP errors
 eden:  ${BIN_DIR}/eden${DOT_X}
-${BIN_DIR}/eden${DOT_X}: ${OBJ_DIR}/eden${DOT_O} ${OBJ_DIR}/Utils${DOT_O} \
-		${OBJ_DIR}/NeuroML${DOT_O} ${OBJ_DIR}/LEMS_Expr${DOT_A} ${OBJ_DIR}/LEMS_CoreComponents${DOT_O} \
-		${OBJ_DIR}/${PUGIXML_NAME}${DOT_O} # third-party libs
+${BIN_DIR}/eden${DOT_X}: \
+		${OBJ_DIR}/eden${DOT_O}\
+		${OBJ_DIR}/Utils${DOT_O} \
+		${OBJ_DIR}/NeuroML${DOT_O} \
+		${OBJ_DIR}/LEMS_Expr${DOT_A} \
+		${OBJ_DIR}/LEMS_CoreComponents${DOT_O} \
+		${OBJ_DIR}/${PUGIXML_NAME}${DOT_O} \
+		${OBJ_DIR}/parse_command_line_args${DOT_O}\
+		${OBJ_DIR}/GenerateModel${DOT_O}
+
 ifeq "$(CXX)" "nvcc"
 	$(CXX) -std=c++14  -c ${SRC_EDEN}/backends/gpu/GpuBackend.cu -o ${OBJ_DIR}/GpuBackend.o $(CXXFLAGS)
 	$(CXX) -std=c++14  -c ${SRC_EDEN}/GPU_helpers.cu -o ${OBJ_DIR}/GPU_helpers.o $(CXXFLAGS)
@@ -227,6 +234,13 @@ ${OBJ_DIR}/Utils${DOT_O}: ${SRC_COMMON}/Utils.cpp ${SRC_COMMON}/Common.h
 
 ${OBJ_DIR}/NeuroML${DOT_O}: ${SRC_EDEN}/NeuroML.cpp ${SRC_EDEN}/NeuroML.h ${SRC_EDEN}/neuroml/LEMS_Expr.h ${SRC_COMMON}/Common.h  ${SRC_PUGIXML}/pugixml.hpp ${SRC_PUGIXML}/pugiconfig.hpp
 	$(CXX) -c $< $(CXXFLAGS) -o $@ -I.
+
+${OBJ_DIR}/parse_command_line_args${DOT_O}: ${SRC_EDEN}/parse_command_line_args.cpp
+	$(CXX) -c $< $(CXXFLAGS) -o $@ -I.
+
+${OBJ_DIR}/GenerateModel${DOT_O}: ${SRC_EDEN}/GenerateModel.cpp
+	$(CXX) -c $< $(CXXFLAGS) -o $@ -I.
+
 
 ${OBJ_DIR}/LEMS_Expr${DOT_A}: ${OBJ_DIR}/LEMS_Expr${DOT_O} ${OBJ_DIR}/LEMS_Expr.yy${DOT_O} ${OBJ_DIR}/LEMS_Expr.tab${DOT_O} 
 	ar rcs $@ $^

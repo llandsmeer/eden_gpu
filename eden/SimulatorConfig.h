@@ -12,6 +12,7 @@ struct SimulatorConfig{
 	
 	bool debug;
 	bool debug_netcode;
+    bool debug_gpu_kernels = false;
 	
 	bool dump_raw_state_scalar;
 	bool dump_raw_state_table;

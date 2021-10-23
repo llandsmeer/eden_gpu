@@ -16,7 +16,6 @@ void setup_gpu(EngineConfig &engine_config){
         printf("GPU backend selected, checking if it's available");
     }
 #ifdef USE_GPU
-    printf("hello from CPU compiled code\n");
     test();
 #else
     printf("No GPU support");

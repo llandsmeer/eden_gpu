@@ -16,6 +16,7 @@ public:
     virtual ~AbstractBackend() {};
     virtual void init() = 0;
     virtual void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) = 0;
+    virtual void synchronize() const = 0;
     virtual void swap_buffers() = 0;
     virtual void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) = 0;
     virtual float * global_state_now() const = 0;
