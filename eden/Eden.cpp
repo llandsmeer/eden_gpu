@@ -123,14 +123,14 @@ int main(int argc, char **argv){
             if (!initializing) {
                 trajectory_logger->write_output_logs(engine_config, time,
                                                     backend->global_state_now(),
-                                                    /* needed on mpi???: */mpi_buffers->enabled() ? backend->global_tables_stateNow_f32() : 0);
+                                                    /* needed on mpi???: */engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0);
             }
 
             //dump to CMD CLI
             backend->dump_iteration(config, initializing, time, step);
 
             //waith for all the MPI communication to be done.
-            mpi_buffers->finish_communicate();
+            mpi_buffers->finish_communicate(engine_config);
 
             // check on step
             if (!initializing) time += engine_config.dt;

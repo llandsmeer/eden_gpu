@@ -45,9 +45,9 @@ struct TrajectoryLogger {
     void open_trajectory_files(EngineConfig & engine_config) {
         // open the logs, one for each logger
         for(auto logger : engine_config.trajectory_loggers){
-            #ifdef USE_MPI
-            assert( engine_config.my_mpi.rank == 0);
-            #endif
+            if (engine_config.use_mpi) {
+                assert( engine_config.my_mpi.rank == 0);
+            }
             const char *path = logger.logfile_path.c_str();
             FILE *fout = fopen( path, "wt");
             if(!fout){
@@ -65,9 +65,9 @@ struct TrajectoryLogger {
 
     void write_output_logs(EngineConfig & engine_config, double time, float * global_state_now, /* for MPI??: */Table_F32 * global_tables_stateNow_f32) {
         for(size_t i = 0; i < engine_config.trajectory_loggers.size(); i++){
-            #ifdef USE_MPI
-            assert(engine_config.my_mpi.rank == 0);
-            #endif
+            if (engine_config.use_mpi) {
+                assert(engine_config.my_mpi.rank == 0);
+            }
             const auto &logger = engine_config.trajectory_loggers[i];
             FILE *& fout = trajectory_open_files[i];
 
@@ -79,24 +79,22 @@ struct TrajectoryLogger {
             fprintf(fout, "%s", tmps_column);
 
             auto GetColumnValue = [
-            #ifdef USE_MPI
                 &engine_config,
                 &global_tables_stateNow_f32,
-            #endif
                 &global_state_now
             ]( const EngineConfig::TrajectoryLogger::LogColumn &column ){
 
                 switch( column.type ){
                     case EngineConfig::TrajectoryLogger::LogColumn::Type::TOPLEVEL_STATE :{
                         if(column.value_type == EngineConfig::TrajectoryLogger::LogColumn::ValueType::F32){
-                            #ifdef USE_MPI
-                            if( column.on_node >= 0 && column.on_node != engine_config.my_mpi.rank ){
-                                size_t table = engine_config.recvlist_impls.at(column.on_node).value_mirror_buffer;
+                            if (engine_config.use_mpi) {
+                                if( column.on_node >= 0 && column.on_node != engine_config.my_mpi.rank ){
+                                    size_t table = engine_config.recvlist_impls.at(column.on_node).value_mirror_buffer;
 
-                                // scaling is done on remote node
-                                return global_tables_stateNow_f32[table][column.entry];
+                                    // scaling is done on remote node
+                                    return global_tables_stateNow_f32[table][column.entry];
+                                }
                             }
-                            #endif
                             // otherwise a local one
                             return (float) (global_state_now[column.entry] * column.scaleFactor);
                         }

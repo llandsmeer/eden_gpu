@@ -141,6 +141,11 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
             engine_config.backend = backend_kind_gpu;
         }
 #endif
+#ifdef USE_MPI
+        else if(arg == "mpi") {
+            engine_config.use_mpi = true;
+        }
+#endif
         else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }

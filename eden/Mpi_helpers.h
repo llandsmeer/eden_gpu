@@ -12,18 +12,20 @@
 // MPI context, just a few globals like world size, rank etc.
 static void Say(const char *format, ... ){
     FILE *fLog = stdout;
-	va_list args;
-	va_start(args, format);
-	int dit;
-	MPI_Comm_rank(MPI_COMM_WORLD, &dit);
+    va_list args;
+    va_start(args, format);
+    int dit;
+    dit = 9234234;
+    //MPI_Comm_rank(MPI_COMM_WORLD, &dit);
     std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
-	vfprintf(fLog, new_format.c_str(), args);
-	fflush(stdout);
-	va_end (args);
+    vfprintf(fLog, new_format.c_str(), args);
+    fflush(stdout);
+    va_end (args);
 }
 #endif
 
 static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
+    if (!Engine->use_mpi) return;
 #ifdef USE_MPI
     // first of first of all, replace argc and argv
 	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
@@ -60,8 +62,6 @@ struct MpiBuffers {
     std::vector<MPI_Request> send_requests;
     std::vector<MPI_Request> recv_requests;
 
-    bool enabled() const { return true; }
-
     // recv's have to be probed before recv'ing
     std::vector<bool> received_probes;
     std::vector<bool> received_sends;
@@ -72,6 +72,7 @@ struct MpiBuffers {
         received_probes( engine_config.recvlist_impls.size(), false),
         received_sends( engine_config.recvlist_impls.size(), false)
     {
+        if (!engine_config.use_mpi) return;
         printf("Allocating comm buffers...\n");
         for( const auto &keyval : engine_config.sendlist_impls ){
             send_off_to_node.push_back( keyval.first );
@@ -86,6 +87,8 @@ struct MpiBuffers {
     }
 
     void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {
+        if (!engine_config.use_mpi) return;
+        printf("INIT_COMMUNICATEEEE");
         float * global_state_now = state->state_one.data();
         Table_F32 *global_tables_stateNow_f32  = state->global_tables_stateOne_f32_arrays.data();
         Table_I64 *global_tables_stateNow_i64  = state->global_tables_stateOne_i64_arrays.data();
@@ -247,7 +250,8 @@ struct MpiBuffers {
         received_sends .assign( received_sends .size(), false );
     }
 
-    void finish_communicate() {
+    void finish_communicate(EngineConfig & engine_config) {
+        if (!engine_config.use_mpi) return;
         // wait for sends, to finish the iteration
         MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE );
     }
@@ -261,8 +265,7 @@ struct MpiBuffers {
 struct MpiBuffers {
     MpiBuffers(EngineConfig & engine_config) {}
     void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
-    void finish_communicate() {}
-    bool enabled() const { return false; }
+    void finish_communicate(EngineConfig & engine_config) {}
 };
 #endif
 #endif

@@ -5661,7 +5661,11 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         total_neurons += (int) pop.instances.size();
     }
 
-    Say("Total neurons: %d", total_neurons);
+    if (engine_config.use_mpi) {
+        Say("Total neurons: %d", total_neurons);
+    } else {
+        printf("Total neurons: %d", total_neurons);
+    }
 
 
     // TODO this is where splitting happens

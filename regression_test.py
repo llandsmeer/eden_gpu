@@ -33,7 +33,7 @@ def verify(nmlfile, output, target, gpu=True, nmpi=None):
         pre = f'mpirun -np {nmpi}'
     else:
         pre = ''
-    system(f'{pre} build/eden {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
+    system(f'{pre} build/eden {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
     toolchain = "GPU" if gpu else "CPU"
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
