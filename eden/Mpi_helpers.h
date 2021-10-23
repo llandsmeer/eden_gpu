@@ -68,7 +68,7 @@ struct MpiBuffers {
 
     MpiBuffers(EngineConfig & engine_config) :
         send_requests( engine_config.sendlist_impls.size(), MPI_REQUEST_NULL ),
-        recv_requests( engine_config.sendlist_impls.size(), MPI_REQUEST_NULL ),
+        recv_requests( engine_config.recvlist_impls.size(), MPI_REQUEST_NULL ),
         received_probes( engine_config.recvlist_impls.size(), false),
         received_sends( engine_config.recvlist_impls.size(), false)
     {
@@ -88,10 +88,10 @@ struct MpiBuffers {
 
     void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {
         if (!engine_config.use_mpi) return;
-        float * global_state_now = backend->global_state_now();
-        Table_F32 *global_tables_stateNow_f32  = backend->global_tables_stateNow_f32();
-        Table_I64 *global_tables_stateNow_i64  = backend->global_tables_stateNow_i64();
-        long long * global_tables_state_i64_sizes = backend->global_tables_state_i64_sizes();
+        float     * global_state_now                = backend->global_state_now();
+        Table_F32 * global_tables_stateNow_f32      = backend->global_tables_stateNow_f32();
+        Table_I64 * global_tables_stateNow_i64      = backend->global_tables_stateNow_i64();
+        long long * global_tables_state_i64_sizes   = backend->global_tables_state_i64_sizes();
 
         auto NetMessage_ToString = []( size_t buf_value_len, const auto &buf ){
             std::string str;
@@ -104,6 +104,7 @@ struct MpiBuffers {
             }
             return str;
         };
+
         // Send info needed by other nodes
         // TODO try parallelizing buffer fill, see if it improves latency
         for( size_t idx = 0; idx < send_off_to_node.size(); idx++ ){
@@ -128,7 +129,6 @@ struct MpiBuffers {
             // NB make sure these buffers are synchronized with CPU memory LATER
             for( size_t i = 0; i < sendlist_impl.vpeer_positions_in_globstate.size(); i++ ){
                 size_t off = sendlist_impl.vpeer_positions_in_globstate[i];
-
                 buf[ vpeer_buf_idx + i ] = global_state_now[off];
             }
 
@@ -150,7 +150,7 @@ struct MpiBuffers {
 
                 // TODO packed bool buffers
                 if( SpikeTable[i] ){
-                    // add index	
+                    // add index
                     buf.push_back(  EncodeI32ToF32(i) );
                     // clear trigger flag for the timestep after the next one
                     SpikeTable[i] = 0;
@@ -163,7 +163,7 @@ struct MpiBuffers {
         }
 
         // Recv info needed by this node
-        auto PostRecv = []( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
+        auto PostRecv = [&config]( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
             MPI_Irecv( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &recv_req );
         };
         auto ReceiveList = [ &engine_config, &global_tables_stateNow_f32, &global_tables_stateNow_i64 ]( const EngineConfig::RecvList_Impl &recvlist_impl, std::vector<float> &buf ){
@@ -205,7 +205,6 @@ struct MpiBuffers {
 
                 // otherwise it's pending
                 all_received = false;
-
 
                 auto &buf = recv_bufs[idx];
                 auto &req = recv_requests[idx];

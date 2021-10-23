@@ -176,6 +176,12 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		log(LOG_ERR) << "NeuroML model not selected (select one with nml <file> in command line)" << LOG_ENDL;
 		exit(2);
 	}
+#ifdef USE_MPI
+    if (!engine_config.use_mpi) {
+		log(LOG_ERR) << "Pass <mpi> flag on command line to enable mpi mode or compile without MPI" << LOG_ENDL;
+		exit(2);
+    }
+#endif
 	gettimeofday(&config_end, NULL);
 	config_time_sec = TimevalDeltaSec(config_start, config_end);
 }

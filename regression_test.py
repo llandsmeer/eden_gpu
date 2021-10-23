@@ -74,13 +74,13 @@ def verify(nmlfile, output, target, gpu=True, nmpi=None):
         print(msg)
 
 system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake ..; make -j 4"')
-#verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
-#verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
-#verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
-#verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
-#verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
 verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
-#verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
 
 print('(-- logs repeated here --)')
 for msg in final:
