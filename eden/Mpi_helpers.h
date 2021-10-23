@@ -67,10 +67,10 @@ struct MpiBuffers {
     std::vector<bool> received_sends;
 
     MpiBuffers(EngineConfig & engine_config) :
-        send_requests( send_off_to_node.size(), MPI_REQUEST_NULL ),
-        recv_requests( recv_off_to_node.size(), MPI_REQUEST_NULL ),
-        received_probes( recv_off_to_node.size(), false),
-        received_sends( recv_off_to_node.size(), false)
+        send_requests( engine_config.sendlist_impls.size(), MPI_REQUEST_NULL ),
+        recv_requests( engine_config.sendlist_impls.size(), MPI_REQUEST_NULL ),
+        received_probes( engine_config.recvlist_impls.size(), false),
+        received_sends( engine_config.recvlist_impls.size(), false)
     {
         printf("Allocating comm buffers...\n");
         for( const auto &keyval : engine_config.sendlist_impls ){
@@ -157,6 +157,7 @@ struct MpiBuffers {
             if( config.debug_netcode ){
                 Say("Send %d : %s", other_rank, NetMessage_ToString( buf_value_len, buf).c_str());
             }
+            printf("MPI_Isend(%p, %ld, %p, %d, %d, %p %p)\n", buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
             MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
         }
 

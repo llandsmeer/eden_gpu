@@ -28,8 +28,12 @@ def system(cmd, gpu=False, submit=True):
 
 final = []
 
-def verify(nmlfile, output, target, gpu=True):
-    system(f'build/eden {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
+def verify(nmlfile, output, target, gpu=True, nmpi=None):
+    if nmpi is not None:
+        pre = f'mpirun -np {nmpi}'
+    else:
+        pre = ''
+    system(f'{pre} build/eden {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
     toolchain = "GPU" if gpu else "CPU"
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
@@ -40,7 +44,12 @@ def verify(nmlfile, output, target, gpu=True):
     for i in range(4):
         target = ref[i].values
         pred = out[i].values
-        error = (abs(target - pred) / target.ptp()).max()
+        try:
+            error = (abs(target - pred) / target.ptp()).max()
+        except:
+            fail = True
+            msg = f'{bcolors.FAIL}{toolchain}|{nmlfile}: REPRODUCTION ERROR=COULD NOT READ DATA%!!{bcolors.ENDC}'
+            break
         max_error = max(error, max_error)
         if not error < 0.02:
             msg = f'{bcolors.FAIL}{toolchain}|{nmlfile}: REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}'
@@ -64,8 +73,9 @@ def verify(nmlfile, output, target, gpu=True):
 system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake ..; make -j 2"')
 verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
 verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
 
 print('(-- logs repeated here --)')
 for msg in final:

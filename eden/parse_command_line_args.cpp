@@ -136,9 +136,11 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
         else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }
+#ifdef USE_GPU
         else if(arg == "gpu") {
             engine_config.backend = backend_kind_gpu;
         }
+#endif
         else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }
