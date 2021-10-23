@@ -21,5 +21,7 @@ public:
     virtual void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) = 0;
     virtual float * global_state_now() const = 0;
     virtual Table_F32 * global_tables_stateNow_f32() const = 0;
+    virtual Table_I64 * global_tables_stateNow_i64 () const = 0;
+    virtual long long * global_tables_state_i64_sizes() const = 0;
 };
 #endif

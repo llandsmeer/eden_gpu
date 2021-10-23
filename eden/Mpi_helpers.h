@@ -3,6 +3,7 @@
 
 #include "EngineConfig.h"
 #include "StateBuffers.h"
+#include "AbstractBackend.h"
 
 #ifdef USE_MPI
 #include "TypePun.h"
@@ -15,8 +16,7 @@ static void Say(const char *format, ... ){
     va_list args;
     va_start(args, format);
     int dit;
-    dit = 9234234;
-    //MPI_Comm_rank(MPI_COMM_WORLD, &dit);
+    MPI_Comm_rank(MPI_COMM_WORLD, &dit);
     std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
     vfprintf(fLog, new_format.c_str(), args);
     fflush(stdout);
@@ -28,26 +28,26 @@ static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
     if (!Engine->use_mpi) return;
 #ifdef USE_MPI
     // first of first of all, replace argc and argv
-	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
-	MPI_Init(&argc, &argv);
-	// Get the number of processes
+    // Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
+    MPI_Init(&argc, &argv);
+    // Get the number of processes
     MPI_Comm_size(MPI_COMM_WORLD, &Engine->my_mpi.world_size);
     // Get the rank of the process
     MPI_Comm_rank(MPI_COMM_WORLD, &Engine->my_mpi.rank);
-	char processor_name[MPI_MAX_PROCESSOR_NAME];
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
 
-	if(1){
-		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
+    if(1){
+        printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
 
-		if( Engine->my_mpi.rank != 0 ){
-			char tmps[555];
-			sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
-			freopen(tmps,"w",stdout);
-			stderr = stdout;
-		}
-	}
+        if( Engine->my_mpi.rank != 0 ){
+            char tmps[555];
+            sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
+            freopen(tmps,"w",stdout);
+            stderr = stdout;
+        }
+    }
 #endif
 }
 
@@ -86,13 +86,12 @@ struct MpiBuffers {
         }
     }
 
-    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {
+    void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {
         if (!engine_config.use_mpi) return;
-        printf("INIT_COMMUNICATEEEE");
-        float * global_state_now = state->state_one.data();
-        Table_F32 *global_tables_stateNow_f32  = state->global_tables_stateOne_f32_arrays.data();
-        Table_I64 *global_tables_stateNow_i64  = state->global_tables_stateOne_i64_arrays.data();
-        long long * global_tables_state_i64_sizes = state->global_tables_state_i64_sizes.data();
+        float * global_state_now = backend->global_state_now();
+        Table_F32 *global_tables_stateNow_f32  = backend->global_tables_stateNow_f32();
+        Table_I64 *global_tables_stateNow_i64  = backend->global_tables_stateNow_i64();
+        long long * global_tables_state_i64_sizes = backend->global_tables_state_i64_sizes();
 
         auto NetMessage_ToString = []( size_t buf_value_len, const auto &buf ){
             std::string str;
@@ -160,7 +159,6 @@ struct MpiBuffers {
             if( config.debug_netcode ){
                 Say("Send %d : %s", other_rank, NetMessage_ToString( buf_value_len, buf).c_str());
             }
-            printf("MPI_Isend(%p, %ld, %p, %d, %d, %p %p)\n", buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
             MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
         }
 
@@ -264,7 +262,7 @@ struct MpiBuffers {
 #else
 struct MpiBuffers {
     MpiBuffers(EngineConfig & engine_config) {}
-    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
+    void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {}
     void finish_communicate(EngineConfig & engine_config) {}
 };
 #endif
