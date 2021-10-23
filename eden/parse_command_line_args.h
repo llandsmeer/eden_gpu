@@ -87,6 +87,9 @@ void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, M
 		else if(arg == "dump_raw_layout"){
 			config.dump_raw_layout = true;
 		}
+        else if(arg == "dump_array_locations") {
+            config.dump_array_locations = true;
+        }
 		else if(arg == "debug"){
 			config.debug = true;
 			config.debug_netcode = true;
@@ -110,7 +113,6 @@ void parse_command_line_args(int argc, char ** argv, SimulatorConfig & config, M
         else if(arg == "syscall-guard") {
             config.syscall_guard_callback = true;
         }
-		
 		else{
 			//unknown, skip it
 			printf("cmdline: skipping unknown token \"%s\"\n", argv[i]);

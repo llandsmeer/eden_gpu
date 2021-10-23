@@ -117,6 +117,7 @@ int main(int argc, char **argv){
 
         //debug mem layout
         if(config.dump_raw_layout) backend->state->dump_raw_layout(backend->tabs);
+        if(config.dump_array_locations) backend->state->dump_array_locations(backend->tabs);
 
         //Initialize MPI
          mpi_buffers = new MpiBuffers(engine_config);
