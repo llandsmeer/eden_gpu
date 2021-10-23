@@ -6,7 +6,6 @@
 #define EDEN_CPU_CPUBACKEND_H
 
 #include "../../AbstractBackend.h"
-#include <mpi.h>
 
 class CpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;

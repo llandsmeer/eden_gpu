@@ -13,7 +13,7 @@ void test();
 
 void setup_gpu(EngineConfig &engine_config){
     if(engine_config.backend == backend_kind_gpu){
-        printf("GPU backend selected, checking if it's available");
+        printf("GPU backend selected, checking if it's available\n");
     }
 #ifdef USE_GPU
     test();

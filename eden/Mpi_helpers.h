@@ -54,6 +54,9 @@ static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
 
 #ifdef USE_MPI
 struct MpiBuffers {
+private:
+    bool actually_using_mpi = false;
+public:
     typedef std::vector<float> SendRecvBuf;
     std::vector<int> send_off_to_node;
     std::vector< SendRecvBuf > send_bufs;
@@ -73,6 +76,7 @@ struct MpiBuffers {
         received_sends( engine_config.recvlist_impls.size(), false)
     {
         if (!engine_config.use_mpi) return;
+        actually_using_mpi = true;
         printf("Allocating comm buffers...\n");
         for( const auto &keyval : engine_config.sendlist_impls ){
             send_off_to_node.push_back( keyval.first );
@@ -255,7 +259,9 @@ struct MpiBuffers {
 
     ~MpiBuffers () {
         // this is necessary, so stdio files are actually flushed
-        MPI_Finalize();
+        if (actually_using_mpi) {
+            MPI_Finalize();
+        }
     }
 };
 #else

@@ -1845,9 +1845,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
         // TODO something more elegant to compile the actual code kernels:
         // dry run, or synchronization to use the same files(beware of distributed file systems !)
-#ifdef USE_MPI
-        sig.name += "_rank_"+itos(engine_config.my_mpi.rank);
-#endif
+        if (engine_config.use_mpi) {
+            sig.name += "_rank_"+itos(engine_config.my_mpi.rank);
+        }
 
         printf("\nAnalyzing %s...:\n", sig.name.c_str());
 
@@ -5405,7 +5405,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     };
 
     // like  workunit_per_cell_per_population, but explicitly referring to local node's fragment of the model
-    std::vector< std::map<Int, work_t> >  local_workunit_per_cell_per_population( net.populations.contents.size() ); // will extend to include segments, somehow LATER
+    std::vector< std::map<Int, work_t> >  local_workunit_per_cell_per_population( (engine_config.use_mpi)*net.populations.contents.size() ); // will extend to include segments, somehow LATER
 
 
     // Since the model is presented in its entirety, nodes need to perform domain decomposition themselves
@@ -5415,7 +5415,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     // Mapping of neuron GIDs <-> ( nodes, work items, PointOnCellLocator's )
 
     std::map< Int, int > neuron_gid_to_node;
-    std::vector< std::map<Int, Int> > neuron_gid_per_cell_per_population( net.populations.contents.size() );
+    std::vector< std::map<Int, Int> > neuron_gid_per_cell_per_population( (engine_config.use_mpi)*net.populations.contents.size() );
 
     // for local neurons only
     std::map< Int, work_t > neuron_gid_to_workitem;
@@ -5484,17 +5484,17 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         return ret;
     };
 
-#else
+#endif
 
+    // workunit_per_cell_per_population is for NON MPI work
+    //
     // Auxiliary map to retrieve each work unit instance's position in the global tables
     // It's useful to remember that 'index' tabs should map contents for each work unit,
     //     (and thus thould have the same length as associated data tables!)
     // so only a realized population -> work items mapping needs to be maintained
 
-    std::vector< std::vector<size_t> >  workunit_per_cell_per_population( net.populations.contents.size() ); // will extend to include segments, somehow LATER
+    std::vector< std::vector<size_t> >  workunit_per_cell_per_population( (!engine_config.use_mpi) * net.populations.contents.size() ); // will extend to include segments, somehow LATER
     // GetLocalWorkItem_FromPopInst
-
-#endif
 
     printf("Creating populations...\n");
 
@@ -5727,14 +5727,15 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             bool instantiate_this = true;
 
 #ifdef USE_MPI
+            if (engine_config.use_mpi) {
+                int on_node = to_node.GetNodeFor( current_neuron_gid );
 
-            int on_node = to_node.GetNodeFor( current_neuron_gid );
+                neuron_gid_per_cell_per_population[pop_seq][inst_seq] = current_neuron_gid;
+                neuron_gid_to_node[current_neuron_gid] = on_node;
 
-            neuron_gid_per_cell_per_population[pop_seq][inst_seq] = current_neuron_gid;
-            neuron_gid_to_node[current_neuron_gid] = on_node;
-
-            if( on_node == engine_config.my_mpi.rank ) instantiate_this = true;
-            else instantiate_this = false;
+                if( on_node == engine_config.my_mpi.rank ) instantiate_this = true;
+                else instantiate_this = false;
+            }
 
 #endif
 
@@ -5746,15 +5747,17 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 if( !InstantiateCellAsWorkitem( cell_type, sig, current_neuron_gid, simulation_random_seed, work_unit ) ) return false;
 
 #ifdef USE_MPI
-
+            if (engine_config.use_mpi) {
                 if(config.debug_netcode) Say("Instantiate %d %d -> %d", pop_seq, inst_seq, current_neuron_gid );
 
                 local_workunit_per_cell_per_population[pop_seq][inst_seq] = work_unit;
                 neuron_gid_to_workitem[current_neuron_gid] = work_unit;
                 neuron_gid_to_popinst.insert( std::make_pair( current_neuron_gid, CellLocator_PopInst(pop_seq, inst_seq) ) );
+            } else {
+                workunit_per_cell_per_population[pop_seq].push_back(work_unit);
+            }
 
 #else
-
                 workunit_per_cell_per_population[pop_seq].push_back(work_unit);
 
 #endif
@@ -5955,14 +5958,16 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         const auto &sig = cell_sigs[pop.component_cell];
 
         //get work unit from type/population/instance
+        long long work_unit;
 #ifdef USE_MPI
-
-        ptrdiff_t work_unit = GetLocalWorkItem_FromPopInst( inp.population, inp.cell_instance );
-        if( work_unit < 0 ) continue;
-
+        if (engine_config.use_mpi) {
+            work_unit = (size_t)GetLocalWorkItem_FromPopInst( inp.population, inp.cell_instance );
+            if( work_unit < 0 ) continue;
+        } else {
+            work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
+        }
 #else
-
-        size_t work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
+        work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
         // branch for whole cell or compartment LATER
 #endif
 
@@ -6096,7 +6101,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
         auto AppendSynapticComponentEntries = [
                 &model, &prepop, &AppendSyncompInternals, &GetSynapseIdId,
-                &GetCompartmentSynapseImplementations, &GetCompartmentSpikerImplementation, &GetCompartmentVoltageStatevarIndex
+                &GetCompartmentSynapseImplementations, &GetCompartmentSpikerImplementation, &GetCompartmentVoltageStatevarIndex,
+                &engine_config
 #ifdef USE_MPI
                 , &AppendRemoteDependency_Vpeer, &AppendRemoteDependency_Spike
 #endif
@@ -6149,7 +6155,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             if( needs_Vpeer ){
 
                 auto AddGap = [
-                        &GetCompartmentVoltageStatevarIndex
+                        &GetCompartmentVoltageStatevarIndex,
+                        &engine_config
 #ifdef USE_MPI
                         , &AppendRemoteDependency_Vpeer
 #endif
@@ -6175,12 +6182,14 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                     // if it exists on this node
 #if USE_MPI
-                    if( peer_work_unit < 0 ){
+                    if (engine_config.use_mpi) {
+                        if( peer_work_unit < 0 ){
 
-                        int node_peer = ~(peer_work_unit);
-                        // get the value from remote peer
-                        if( !AppendRemoteDependency_Vpeer( peer_loc, node_peer, glob_tab_Vpeer ) ) return false;
-                        return true;
+                            int node_peer = ~(peer_work_unit);
+                            // get the value from remote peer
+                            if( !AppendRemoteDependency_Vpeer( peer_loc, node_peer, glob_tab_Vpeer ) ) return false;
+                            return true;
+                        }
                     }
 #endif
                     // otherwise it's local
@@ -6235,7 +6244,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
 
                 auto AddChemPrePost = [
-                        &prepop, &GetCompartmentSpikerImplementation
+                        &engine_config, &prepop, &GetCompartmentSpikerImplementation
 #ifdef USE_MPI
                         , &AppendRemoteDependency_Spike
 #endif
@@ -6277,12 +6286,14 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     if( !AddPost( tabs, post_work_unit, post_synimpl) ) return false;
 
 #ifdef USE_MPI
-                    if( pre_work_unit < 0 ){
+                    if (engine_config.use_mpi) {
+                        if( pre_work_unit < 0 ){
 
-                        // needs to ask for spike input from pre, and keep the map from packed received input to buf
-                        int node_pre = ~(pre_work_unit); // TODO refactor
-                        if( !AppendRemoteDependency_Spike( pre_loc, node_pre, packed_id ) ) return false;
-                        return true;
+                            // needs to ask for spike input from pre, and keep the map from packed received input to buf
+                            int node_pre = ~(pre_work_unit); // TODO refactor
+                            if( !AppendRemoteDependency_Spike( pre_loc, node_pre, packed_id ) ) return false;
+                            return true;
+                        }
                     }
 #endif
                     // local pre, needs idx from sender
@@ -6324,17 +6335,20 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             const PointOnCellLocator post_loc = { proj.postsynapticPopulation, conn.postCell, conn.postSegment, conn.postFractionAlong };
 
             //get work unit from type/population/instance. TODO replace with something better, using work_unit only when applicable. (eg split cell)
-
+            work_t work_unit_pre;
+            work_t work_unit_post;
 #ifdef USE_MPI
-
-            work_t work_unit_pre  = WorkUnitOrNode( proj.presynapticPopulation , conn.preCell  );
-            work_t work_unit_post = WorkUnitOrNode( proj.postsynapticPopulation, conn.postCell );
+            if (engine_config.use_mpi) {
+                work_unit_pre  = WorkUnitOrNode( proj.presynapticPopulation , conn.preCell  );
+                work_unit_post = WorkUnitOrNode( proj.postsynapticPopulation, conn.postCell );
+            } else {
+                work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
+                work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
+            }
 
 #else
-
-            work_t work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
-            work_t work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
-
+            work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
+            work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
 #endif
 
             // printf("connnn %lx %ld\n", work_unit_pre, work_unit_post); fflush(stdout);
@@ -6423,26 +6437,28 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             // get work item for this segment
 
+            work_t work_unit_seg;
 #ifdef USE_MPI
+            if (engine_config.use_mpi) {
+                work_unit_seg = WorkUnitOrNode( path.population, path.cell_instance );
 
-            work_t work_unit_seg = WorkUnitOrNode( path.population, path.cell_instance );
+                if( work_unit_seg < 0 ){
+                    #ifdef MPI
+                    assert(engine_config.my_mpi.rank == 0 );
+                    #endif
 
-            if( work_unit_seg < 0 ){
-                #ifdef MPI
-                assert(engine_config.my_mpi.rank == 0 );
-                #endif
+                    int remote_node = ~(work_unit_seg);
+                    column.on_node = remote_node;
+                    if( !AppendRemoteDependency_DataWriter( {daw_seq, col_seq}, remote_node ) ) return false;
 
-                int remote_node = ~(work_unit_seg);
-                column.on_node = remote_node;
-                if( !AppendRemoteDependency_DataWriter( {daw_seq, col_seq}, remote_node ) ) return false;
-
-                return true;
+                    return true;
+                }
+            } else {
+                work_unit_seg = workunit_per_cell_per_population[path.population][path.cell_instance];
             }
 
 #else
-
-            work_t work_unit_seg = workunit_per_cell_per_population[path.population][path.cell_instance];
-
+            work_unit_seg = workunit_per_cell_per_population[path.population][path.cell_instance];
 #endif
 
 
@@ -6684,15 +6700,17 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     bool i_log_the_data = true;
 
 #ifdef USE_MPI
-    if(engine_config.my_mpi.rank == 0 ){
+    if (engine_config.use_mpi) {
+        if(engine_config.my_mpi.rank == 0 ){
 
-        i_log_the_data = true;
-        // form the data structures, send requests for whatever is remote
+            i_log_the_data = true;
+            // form the data structures, send requests for whatever is remote
 
-    }
-    else{
-        i_log_the_data = false;
-        // wait for remote requests from logger node to emerge
+        }
+        else{
+            i_log_the_data = false;
+            // wait for remote requests from logger node to emerge
+        }
     }
 #endif
 
@@ -6724,89 +6742,91 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     //FIXME add event writers
 
 #ifdef USE_MPI
-
-    printf("Determining recvlists...\n"); fflush(stdout);
-    // Now, each node informs the others on what information streams it needs, in a symbolic(NeuroML-based) format
-    if( config.debug_netcode ){
-    Say("Recv");
-    for( const auto &keyval : recv_lists ){
-        Say("from node %d:", keyval.first);
-
-        const auto &recv_list = keyval.second;
-        for( const auto &keyval : recv_list.vpeer_refs ){
-            const PointOnCellLocator &loc = keyval.first;
-            std::string say_refs = "\tVpeer " + loc.toPresentableString() + " to remap refs: ";
-
-            for( TabEntryRef_Packed ref : keyval.second ){
-                say_refs += presentable_string(ref) + " ";
-            }
-            Say("%s", say_refs.c_str());
-        }
-
-        for( const auto &keyval : recv_list.spike_refs ){
-            const PointOnCellLocator &loc = keyval.first;
-            std::string say_refs = "\tSpikes " + loc.toPresentableString() + " to trigger refs: ";
-
-            for( TabEntryRef_Packed ref : keyval.second ){
-                say_refs += presentable_string(ref) + " ";
-            }
-            Say("%s", say_refs.c_str());
-        }
-
-        for( const auto &daw : recv_list.daw_refs ){
-            std::string say_refs = "\tDaw " + daw.toPresentableString() + " to log ";
-
-            Say("%s", say_refs.c_str());
-        }
-    }
-    }
-
-    printf("Exchanging recvlists...\n"); fflush(stdout);
     // I send recvlists to nodes, for them to send to me
     std::map< int, std::vector<char> > recvlists_encoded;
 
     // Nodes send recvlists to nodes, for me to send to them
     std::map< int, std::vector<char> > sendlists_encoded;
 
-    // encode the recvlists for transmission
-    for( const auto &keyval : recv_lists ){
-        int other_rank = keyval.first;
-        const RecvList &recvlist = keyval.second;
-        std::string enc;
-        // first, the header oine
-        enc += accurate_string( recvlist.vpeer_refs.size() ) + " "
-            +  accurate_string( recvlist.daw_refs  .size() ) + " "
-            +  accurate_string( recvlist.spike_refs.size() ) + "\n" ;
+    if (engine_config.use_mpi) {
+        printf("Determining recvlists...\n"); fflush(stdout);
+        // Now, each node informs the others on what information streams it needs, in a symbolic(NeuroML-based) format
+        if( config.debug_netcode ){
+        Say("Recv");
+        for( const auto &keyval : recv_lists ){
+            Say("from node %d:", keyval.first);
 
-        for( const auto &keyval : recvlist.vpeer_refs ){
-            const auto &loc = keyval.first;
-            loc.toEncodedString( enc );
-            enc += "\n";
+            const auto &recv_list = keyval.second;
+            for( const auto &keyval : recv_list.vpeer_refs ){
+                const PointOnCellLocator &loc = keyval.first;
+                std::string say_refs = "\tVpeer " + loc.toPresentableString() + " to remap refs: ";
+
+                for( TabEntryRef_Packed ref : keyval.second ){
+                    say_refs += presentable_string(ref) + " ";
+                }
+                Say("%s", say_refs.c_str());
+            }
+
+            for( const auto &keyval : recv_list.spike_refs ){
+                const PointOnCellLocator &loc = keyval.first;
+                std::string say_refs = "\tSpikes " + loc.toPresentableString() + " to trigger refs: ";
+
+                for( TabEntryRef_Packed ref : keyval.second ){
+                    say_refs += presentable_string(ref) + " ";
+                }
+                Say("%s", say_refs.c_str());
+            }
+
+            for( const auto &daw : recv_list.daw_refs ){
+                std::string say_refs = "\tDaw " + daw.toPresentableString() + " to log ";
+
+                Say("%s", say_refs.c_str());
+            }
         }
-        for( const DawRef &daw_ref : recvlist.daw_refs ){
-            daw_ref.toEncodedString( enc );
-            enc += "\n";
-        }
-        for( const auto &keyval : recvlist.spike_refs ){
-            const auto &loc = keyval.first;
-            loc.toEncodedString( enc );
-            enc += "\n";
         }
 
-        auto &recvlist_encoded = recvlists_encoded[other_rank];
-        AppendToVector( recvlist_encoded, enc );
-        recvlist_encoded.push_back('\0');
-    }
+        printf("Exchanging recvlists...\n"); fflush(stdout);
 
-    // dbg output encoded
-    if( config.debug_netcode ){
-    Say("Send Recvlist");
-    for( const auto &keyval : recvlists_encoded ){
-        int other_rank = keyval.first;
-        const auto &recvlist_encoded = keyval.second;
+        // encode the recvlists for transmission
+        for( const auto &keyval : recv_lists ){
+            int other_rank = keyval.first;
+            const RecvList &recvlist = keyval.second;
+            std::string enc;
+            // first, the header oine
+            enc += accurate_string( recvlist.vpeer_refs.size() ) + " "
+                +  accurate_string( recvlist.daw_refs  .size() ) + " "
+                +  accurate_string( recvlist.spike_refs.size() ) + "\n" ;
 
-        Say("to node %d, %s", other_rank, recvlist_encoded.data());
-    }
+            for( const auto &keyval : recvlist.vpeer_refs ){
+                const auto &loc = keyval.first;
+                loc.toEncodedString( enc );
+                enc += "\n";
+            }
+            for( const DawRef &daw_ref : recvlist.daw_refs ){
+                daw_ref.toEncodedString( enc );
+                enc += "\n";
+            }
+            for( const auto &keyval : recvlist.spike_refs ){
+                const auto &loc = keyval.first;
+                loc.toEncodedString( enc );
+                enc += "\n";
+            }
+
+            auto &recvlist_encoded = recvlists_encoded[other_rank];
+            AppendToVector( recvlist_encoded, enc );
+            recvlist_encoded.push_back('\0');
+        }
+
+        // dbg output encoded
+        if( config.debug_netcode ){
+            Say("Send Recvlist");
+            for( const auto &keyval : recvlists_encoded ){
+                int other_rank = keyval.first;
+                const auto &recvlist_encoded = keyval.second;
+
+                Say("to node %d, %s", other_rank, recvlist_encoded.data());
+            }
+        }
     }
     // very much like Alltoallv, but communications are made with only existing connections (not the whole cartesian product)
     // this should really shine in large amounts of nodes (hundreds? or even tens?)
@@ -7167,198 +7187,200 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // and form the mirrors
     };
 
-    ExchangeLists( MPI_CHAR, recvlists_encoded, sendlists_encoded );
+    if (engine_config.use_mpi) {
+        ExchangeLists( MPI_CHAR, recvlists_encoded, sendlists_encoded );
 
-    // dbg output encoded
-    if( config.debug_netcode ){
-    Say("Received Recvlists");
-    for( const auto &keyval : sendlists_encoded ){
-        int other_rank = keyval.first;
-        const auto &recvlist_encoded = keyval.second;
+        // dbg output encoded
+        if( config.debug_netcode ){
+            Say("Received Recvlists");
+            for( const auto &keyval : sendlists_encoded ){
+                int other_rank = keyval.first;
+                const auto &recvlist_encoded = keyval.second;
 
-        Say("from node %d, %s", other_rank, recvlist_encoded.data());
-    }
-    }
-
-    // decode the recvlists
-    for( auto &keyval : sendlists_encoded ){
-
-        auto other_rank = keyval.first;
-        auto &enc = keyval.second; // newlines will be replaced with nulls to ease parsing
-
-        auto &sendlist = send_lists[other_rank];
-        assert( enc.size() );
-        // convert enc to null-terminated lines, for convenience
-        std::vector<char *> lines;
-        lines.push_back( enc.data() );
-        for( size_t i = 0; i < enc.size() ; i++ ){
-            if( enc[i] == '\n' ){
-                enc[i] = '\0';
-                if( i + 1 < enc.size() ) lines.push_back( enc.data() + i + 1 );
+                Say("from node %d, %s", other_rank, recvlist_encoded.data());
             }
         }
 
-        if( config.debug_netcode ){
-        Say("Lines: %zd", lines.size() );
-        for( int i = 0; i < (int)lines.size() ; i++ ){
-            Say("%d:\t%s", i, lines[i]);
-            Say("end-----\n\n");
-        }
-        }
+        // decode the recvlists
+        for( auto &keyval : sendlists_encoded ){
 
-        Int vpeers, daws, spikes;
-        sscanf(lines[0], "%ld %ld %ld", &vpeers, &daws, &spikes );
-        if( config.debug_netcode ){
-            Say("%ld %ld %ld <- %s", vpeers, daws, spikes, lines[0]);
-        }
-        Int vpeer_idx = 1;
-        Int daw_idx = vpeer_idx + vpeers;
-        Int spike_idx = daw_idx + daws;
+            auto other_rank = keyval.first;
+            auto &enc = keyval.second; // newlines will be replaced with nulls to ease parsing
 
-
-        sendlist.vpeer_sources.resize(vpeers);
-        for(int i = 0; i < vpeers; i++){
-            auto ret = sendlist.vpeer_sources[i].fromEncodedString( lines[ vpeer_idx + i ] );
-            if(!ret) Say( "fail %s", lines[ vpeer_idx + i ] );
-            assert(ret);
-        }
-        sendlist.daw_refs.resize(daws);
-        for(int i = 0; i < daws; i++){
-            auto ret = sendlist.daw_refs[i].fromEncodedString( lines[ daw_idx + i ] );
-            if(!ret) Say( "fail %s", lines[ daw_idx + i ] );
-            assert(ret);
-        }
-        sendlist.spike_sources.resize(spikes);
-        for(int i = 0; i < spikes; i++){
-            auto ret = sendlist.spike_sources[i].fromEncodedString( lines[ spike_idx + i ] );
-            if(!ret) Say( "fail %s", lines[ spike_idx + i ] );
-            assert(ret);
-        }
-    }
-
-    // dbg output encoded symbolic
-    if( config.debug_netcode ){
-    Say("Send");
-    for( const auto &keyval : send_lists ){
-        Say("to node %d:", keyval.first);
-
-        const auto &send_list = keyval.second;
-        for( const auto &loc : send_list.vpeer_sources ){
-            std::string say_refs = "\tVpeer " + loc.toPresentableString() ;
-            Say("%s", say_refs.c_str());
-        }
-
-        for( const auto &loc : send_list.spike_sources ){
-            std::string say_refs = "\tSpikes " + loc.toPresentableString() ;
-            Say("%s", say_refs.c_str());
-        }
-
-        for( const auto &daw : send_list.daw_refs ){
-            std::string say_refs = "\tDaw " + daw.toPresentableString() ;
-            Say("%s", say_refs.c_str());
-        }
-    }
-    }
-
-    // now construct the send and recv mirrors, and remap
-
-    // construct and remap for send_lists
-    for( const auto &keyval : send_lists ){
-        auto other_rank = keyval.first;
-        const auto &send_list = keyval.second;
-
-        auto &send_list_impl = engine_config.sendlist_impls[other_rank];
-
-        send_list_impl.vpeer_positions_in_globstate.resize( send_list.vpeer_sources.size() );
-        for( size_t i = 0; i < send_list.vpeer_sources.size() ; i++ ){
-            const auto &loc = send_list.vpeer_sources.at(i);
-            send_list_impl.vpeer_positions_in_globstate[i] = GetCompartmentVoltageStatevarIndex_Global( loc );
-        }
-
-        send_list_impl.daw_columns.resize( send_list.daw_refs.size() );
-        // also realize any data logger columns that access values local to this node
-        for( size_t i = 0; i < send_list.daw_refs.size() ; i++ ){
-            const auto &ref = send_list.daw_refs.at(i);
-
-            // NB make sure this node knows about this daw
-            const auto &daw = sim.data_writers.get(ref.daw_seq);
-            const auto &col = daw.output_columns.get(ref.col_seq);
-            const auto &path = col.quantity;
-
-            auto &impl_col = send_list_impl.daw_columns[i];
-
-            if( !Implement_LoggerColumn( ref.daw_seq, ref.col_seq, daw.fileName, path, impl_col) ) return false;
-        }
-
-        // allocate mirror buffers for spike triggers
-        send_list_impl.spike_mirror_buffer = tabs.global_tables_state_i64_arrays.size();
-        tabs.                                     global_tables_state_i64_arrays.emplace_back();
-        auto &tab = tabs.                         global_tables_state_i64_arrays.back();
-        // TODO pack the boolean vectors
-        tab.resize( send_list.spike_sources.size(), 0);
-        // and add extra notification entries to the spike sources
-        for( size_t i = 0; i < send_list.spike_sources.size() ; i++ ){
-            const auto &loc = send_list.spike_sources.at(i);
-
-            size_t global_idx_T_spiker;
-            if( !GetCompartmentSpikerImplementation_Global( loc, global_idx_T_spiker) ) return false;
-            auto packed_id = GetEncodedTableEntryId( send_list_impl.spike_mirror_buffer, i );
-
-            tabs.global_tables_const_i64_arrays[global_idx_T_spiker].push_back( packed_id );
-        }
-    }
-    // The final send buffer for these will be allocated at run time
-
-    // construct and remap for recv_lists
-    for( const auto &keyval : recv_lists ){
-        auto other_rank = keyval.first;
-        const auto &recv_list = keyval.second;
-
-        auto &recv_list_impl = engine_config.recvlist_impls[other_rank];
-
-        // allocate mirror buffers for values continuously being sent
-        recv_list_impl.value_mirror_size = recv_list.vpeer_refs.size() + recv_list.daw_refs.size();
-        recv_list_impl.value_mirror_buffer = tabs.global_tables_state_f32_arrays.size();
-        tabs.                                     global_tables_state_f32_arrays.emplace_back();
-        auto &value_mirror = tabs.                global_tables_state_f32_arrays.back();
-        value_mirror.resize( recv_list_impl.value_mirror_size, 5555); // XXX set as NAN after debug
-        for( int i = recv_list.vpeer_refs.size(); i < (int)value_mirror.size(); i++ ) value_mirror[i] = 4444;
-        // NB walk through these requested values, in the same order they were requested in the recv list
-        long long value_mirror_table = recv_list_impl.value_mirror_buffer;
-        int value_mirror_entry = 0;
-        for( const auto &keyval : recv_list.vpeer_refs ){
-            const auto & remap_ref_list = keyval.second;
-
-            for( TabEntryRef_Packed ref_packed : remap_ref_list ){
-                TabEntryRef ref = GetDecodedTableEntryId(ref_packed);
-                TabEntryRef_Packed remapped_ref = GetEncodedTableEntryId( value_mirror_table, value_mirror_entry );
-                // printf("reff %llx -> %lld %d -> %llx, %zx %zx\n", ref_packed, ref.table, ref.entry, remapped_ref, tabs.global_tables_const_i64_arrays.size() , tabs.global_tables_const_i64_arrays[ref.table].size());
-                tabs.global_tables_const_i64_arrays[ref.table][ref.entry] = remapped_ref;
+            auto &sendlist = send_lists[other_rank];
+            assert( enc.size() );
+            // convert enc to null-terminated lines, for convenience
+            std::vector<char *> lines;
+            lines.push_back( enc.data() );
+            for( size_t i = 0; i < enc.size() ; i++ ){
+                if( enc[i] == '\n' ){
+                    enc[i] = '\0';
+                    if( i + 1 < enc.size() ) lines.push_back( enc.data() + i + 1 );
+                }
             }
 
-            value_mirror_entry++;
+            if( config.debug_netcode ){
+            Say("Lines: %zd", lines.size() );
+            for( int i = 0; i < (int)lines.size() ; i++ ){
+                Say("%d:\t%s", i, lines[i]);
+                Say("end-----\n\n");
+            }
+            }
+
+            Int vpeers, daws, spikes;
+            sscanf(lines[0], "%ld %ld %ld", &vpeers, &daws, &spikes );
+            if( config.debug_netcode ){
+                Say("%ld %ld %ld <- %s", vpeers, daws, spikes, lines[0]);
+            }
+            Int vpeer_idx = 1;
+            Int daw_idx = vpeer_idx + vpeers;
+            Int spike_idx = daw_idx + daws;
+
+
+            sendlist.vpeer_sources.resize(vpeers);
+            for(int i = 0; i < vpeers; i++){
+                auto ret = sendlist.vpeer_sources[i].fromEncodedString( lines[ vpeer_idx + i ] );
+                if(!ret) Say( "fail %s", lines[ vpeer_idx + i ] );
+                assert(ret);
+            }
+            sendlist.daw_refs.resize(daws);
+            for(int i = 0; i < daws; i++){
+                auto ret = sendlist.daw_refs[i].fromEncodedString( lines[ daw_idx + i ] );
+                if(!ret) Say( "fail %s", lines[ daw_idx + i ] );
+                assert(ret);
+            }
+            sendlist.spike_sources.resize(spikes);
+            for(int i = 0; i < spikes; i++){
+                auto ret = sendlist.spike_sources[i].fromEncodedString( lines[ spike_idx + i ] );
+                if(!ret) Say( "fail %s", lines[ spike_idx + i ] );
+                assert(ret);
+            }
         }
 
+        // dbg output encoded symbolic
+        if( config.debug_netcode ){
+        Say("Send");
+        for( const auto &keyval : send_lists ){
+            Say("to node %d:", keyval.first);
 
-        // right next, the daw values
-        for( const auto &daw_ref : recv_list.daw_refs ){
+            const auto &send_list = keyval.second;
+            for( const auto &loc : send_list.vpeer_sources ){
+                std::string say_refs = "\tVpeer " + loc.toPresentableString() ;
+                Say("%s", say_refs.c_str());
+            }
 
-            assert(engine_config.my_mpi.rank == 0);
+            for( const auto &loc : send_list.spike_sources ){
+                std::string say_refs = "\tSpikes " + loc.toPresentableString() ;
+                Say("%s", say_refs.c_str());
+            }
 
-            engine_config.trajectory_loggers[daw_ref.daw_seq].columns[daw_ref.col_seq].entry = value_mirror_entry;
-
-            value_mirror_entry++;
+            for( const auto &daw : send_list.daw_refs ){
+                std::string say_refs = "\tDaw " + daw.toPresentableString() ;
+                Say("%s", say_refs.c_str());
+            }
+        }
         }
 
-        // and also track where the spikes should be sent to
-        int spike_mirror_entry = 0;
-        recv_list_impl.spike_destinations.resize( recv_list.spike_refs.size() );
-        for( const auto &keyval : recv_list.spike_refs ){
-            const auto &ref_list = keyval.second;
+        // now construct the send and recv mirrors, and remap
 
-            recv_list_impl.spike_destinations[spike_mirror_entry] = ref_list;
+        // construct and remap for send_lists
+        for( const auto &keyval : send_lists ){
+            auto other_rank = keyval.first;
+            const auto &send_list = keyval.second;
 
-            spike_mirror_entry++;
+            auto &send_list_impl = engine_config.sendlist_impls[other_rank];
+
+            send_list_impl.vpeer_positions_in_globstate.resize( send_list.vpeer_sources.size() );
+            for( size_t i = 0; i < send_list.vpeer_sources.size() ; i++ ){
+                const auto &loc = send_list.vpeer_sources.at(i);
+                send_list_impl.vpeer_positions_in_globstate[i] = GetCompartmentVoltageStatevarIndex_Global( loc );
+            }
+
+            send_list_impl.daw_columns.resize( send_list.daw_refs.size() );
+            // also realize any data logger columns that access values local to this node
+            for( size_t i = 0; i < send_list.daw_refs.size() ; i++ ){
+                const auto &ref = send_list.daw_refs.at(i);
+
+                // NB make sure this node knows about this daw
+                const auto &daw = sim.data_writers.get(ref.daw_seq);
+                const auto &col = daw.output_columns.get(ref.col_seq);
+                const auto &path = col.quantity;
+
+                auto &impl_col = send_list_impl.daw_columns[i];
+
+                if( !Implement_LoggerColumn( ref.daw_seq, ref.col_seq, daw.fileName, path, impl_col) ) return false;
+            }
+
+            // allocate mirror buffers for spike triggers
+            send_list_impl.spike_mirror_buffer = tabs.global_tables_state_i64_arrays.size();
+            tabs.                                     global_tables_state_i64_arrays.emplace_back();
+            auto &tab = tabs.                         global_tables_state_i64_arrays.back();
+            // TODO pack the boolean vectors
+            tab.resize( send_list.spike_sources.size(), 0);
+            // and add extra notification entries to the spike sources
+            for( size_t i = 0; i < send_list.spike_sources.size() ; i++ ){
+                const auto &loc = send_list.spike_sources.at(i);
+
+                size_t global_idx_T_spiker;
+                if( !GetCompartmentSpikerImplementation_Global( loc, global_idx_T_spiker) ) return false;
+                auto packed_id = GetEncodedTableEntryId( send_list_impl.spike_mirror_buffer, i );
+
+                tabs.global_tables_const_i64_arrays[global_idx_T_spiker].push_back( packed_id );
+            }
+        }
+        // The final send buffer for these will be allocated at run time
+
+        // construct and remap for recv_lists
+        for( const auto &keyval : recv_lists ){
+            auto other_rank = keyval.first;
+            const auto &recv_list = keyval.second;
+
+            auto &recv_list_impl = engine_config.recvlist_impls[other_rank];
+
+            // allocate mirror buffers for values continuously being sent
+            recv_list_impl.value_mirror_size = recv_list.vpeer_refs.size() + recv_list.daw_refs.size();
+            recv_list_impl.value_mirror_buffer = tabs.global_tables_state_f32_arrays.size();
+            tabs.                                     global_tables_state_f32_arrays.emplace_back();
+            auto &value_mirror = tabs.                global_tables_state_f32_arrays.back();
+            value_mirror.resize( recv_list_impl.value_mirror_size, 5555); // XXX set as NAN after debug
+            for( int i = recv_list.vpeer_refs.size(); i < (int)value_mirror.size(); i++ ) value_mirror[i] = 4444;
+            // NB walk through these requested values, in the same order they were requested in the recv list
+            long long value_mirror_table = recv_list_impl.value_mirror_buffer;
+            int value_mirror_entry = 0;
+            for( const auto &keyval : recv_list.vpeer_refs ){
+                const auto & remap_ref_list = keyval.second;
+
+                for( TabEntryRef_Packed ref_packed : remap_ref_list ){
+                    TabEntryRef ref = GetDecodedTableEntryId(ref_packed);
+                    TabEntryRef_Packed remapped_ref = GetEncodedTableEntryId( value_mirror_table, value_mirror_entry );
+                    // printf("reff %llx -> %lld %d -> %llx, %zx %zx\n", ref_packed, ref.table, ref.entry, remapped_ref, tabs.global_tables_const_i64_arrays.size() , tabs.global_tables_const_i64_arrays[ref.table].size());
+                    tabs.global_tables_const_i64_arrays[ref.table][ref.entry] = remapped_ref;
+                }
+
+                value_mirror_entry++;
+            }
+
+
+            // right next, the daw values
+            for( const auto &daw_ref : recv_list.daw_refs ){
+
+                assert(engine_config.my_mpi.rank == 0);
+
+                engine_config.trajectory_loggers[daw_ref.daw_seq].columns[daw_ref.col_seq].entry = value_mirror_entry;
+
+                value_mirror_entry++;
+            }
+
+            // and also track where the spikes should be sent to
+            int spike_mirror_entry = 0;
+            recv_list_impl.spike_destinations.resize( recv_list.spike_refs.size() );
+            for( const auto &keyval : recv_list.spike_refs ){
+                const auto &ref_list = keyval.second;
+
+                recv_list_impl.spike_destinations[spike_mirror_entry] = ref_list;
+
+                spike_mirror_entry++;
+            }
         }
     }
 
