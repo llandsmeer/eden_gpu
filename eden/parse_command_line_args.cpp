@@ -114,9 +114,6 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		else if(arg == "debug_netcode"){
 			config.debug_netcode = true;
 		}
-        else if(arg == "debug_gpu_kernels") {
-            config.debug_gpu_kernels = true;
-        }
 		else if(arg == "-S"){
 			config.output_assembly = true;
 		}
@@ -139,6 +136,12 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 #ifdef USE_GPU
         else if(arg == "gpu") {
             engine_config.backend = backend_kind_gpu;
+        }
+        else if(arg == "trove") {
+            engine_config.trove = true;
+        }
+        else if(arg == "debug_gpu_kernels") {
+            config.debug_gpu_kernels = true;
         }
 #endif
 #ifdef USE_MPI
@@ -176,6 +179,10 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		log(LOG_ERR) << "NeuroML model not selected (select one with nml <file> in command line)" << LOG_ENDL;
 		exit(2);
 	}
+    if (engine_config.backend != backend_kind_gpu && engine_config.trove) {
+		log(LOG_WARN) << "Can not use TROVE in CPU mode" << LOG_ENDL;
+        engine_config.trove = false;
+    }
 	gettimeofday(&config_end, NULL);
 	config_time_sec = TimevalDeltaSec(config_start, config_end);
 }
