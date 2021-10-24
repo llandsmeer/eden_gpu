@@ -109,7 +109,9 @@ runEden(...)
 
 ## Command line flags
 
+ - `mpi` : run with MPI
  - `gpu` : run with GPU / CUDA backend
+ - `trove` : enable trove AoS to SoA conversion library for CUDA
  - `threads_per_block <int>` : set CUDA threads per block
  - `nml <neuroml file>` : set the NeuroML model file (mandatory)
  - `cable_solver <fwd_euler|bwd_euler|auto>`
