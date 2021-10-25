@@ -19,6 +19,13 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
     const float dt = engine_config.dt;
     for (size_t idx = 0; idx < tabs.consecutive_kernels.size(); idx++) {
 
+        CUDA_CHECK_RETURN(cudaMemcpyAsync(
+                m_Host_state_now,
+                m_global_state_now,
+                state->state_one.size()*sizeof(state->state_one[0]),
+                cudaMemcpyDeviceToHost));
+
+
         if(config.debug){
             printf("consecutive items %lld start\n", (long long)idx);
             // if(my_mpi.rank != 0) continue;
@@ -63,12 +70,8 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
 }
 
 float * GpuBackend::global_state_now() const {
-    CUDA_CHECK_RETURN(cudaMemcpy(
-            state->state_one.data(),
-            m_global_state_now,
-            state->state_one.size()*sizeof(state->state_one[0]),
-            cudaMemcpyDeviceToHost));
-    return state->state_one.data();
+    synchronize();
+    return m_Host_state_now;
 }
 
 Table_F32 * GpuBackend::global_tables_stateNow_f32 () const {

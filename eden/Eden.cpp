@@ -135,6 +135,9 @@ int main(int argc, char **argv){
             // check on step
             if (!initializing) time += engine_config.dt;
 
+            //synchronize the back_end
+            backend->synchronize();
+
             //swap the double buffering idea.
             backend->swap_buffers();
         }

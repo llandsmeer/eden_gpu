@@ -20,10 +20,16 @@ public:
         //create the Statebuffers
         state = new StateBuffers(tabs);
 
+        //create the copy back host pointers
+        m_Host_state_now = state->state_one.data();
+        m_Host_state_next = state->state_two.data();
+
+        //do GPU stuff
 #ifdef USE_GPU
         copy_data_to_device();
+#else
+        //should never happen
 #endif
-
     }
 
 //    getters
@@ -57,6 +63,7 @@ public:
         exit(2);
 #endif
     };
+
     void synchronize() const override {
 #ifdef USE_GPU
         synchronize_gpu();
@@ -67,9 +74,13 @@ public:
 
     };
     void swap_buffers() override {
+        //GPU buffers
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
         std::swap(m_global_tables_stateNow_i64, m_global_tables_stateNext_i64);
+
+        //CPU buffers to print stuff
+        std::swap(m_Host_state_now, m_Host_state_next);
     }
     void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) override {
         if( config.dump_raw_state_scalar || config.dump_raw_state_table ){
@@ -107,6 +118,9 @@ private:
     long long int* m_global_table_state_f32_index;
     long long int* m_global_table_state_i64_index;
     long long int* m_global_state_f32_index;
+
+    float * m_Host_state_now = nullptr;
+    float * m_Host_state_next = nullptr;
 
     float * m_global_state_now = nullptr;
     float * m_global_state_next = nullptr;
