@@ -4,10 +4,26 @@
 
 #include "GpuBackend.h"
 
+extern "C" {
+typedef void ( *GPUIterationCallback )(
+        long long start, long long n_items,
+        double time, float dt, const float *__restrict__ global_constants, const long long *__restrict__ /*XXX*/ global_const_f32_index,
+        const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long *__restrict__ /*XXX*/ global_table_const_f32_index,
+        const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long *__restrict__ /*XXX*/ global_table_const_i64_index,
+        const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays,
+        long long *__restrict__ /*XXX*/ global_table_state_f32_index,
+        const long long *__restrict__ global_state_table_i64_sizes, Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays,
+        long long *__restrict__ /*XXX*/ global_table_state_i64_index,
+        const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long *__restrict__ global_state_f32_index,
+        long long step, int threads_per_block, cudaStream_t *streams_calculate);
+}
+
 //Todo find a way to pass the stream to the calculate kernel
 
 cudaStream_t streams_copy;
 cudaStream_t streams_calculate;
+
+
 
 #define CUDA_CHECK_RETURN(value) {										\
 	cudaError_t _m_cudaStat = value;									\
@@ -75,7 +91,8 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
                           m_global_state_next,
                           m_global_state_f32_index,
                           step,
-                          threads_per_block
+                          threads_per_block,
+                          &streams_calculate
             );
 
         if(config.debug){

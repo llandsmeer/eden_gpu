@@ -1836,7 +1836,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "long long *__restrict__ global_state_table_f32_sizes, Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block ){\n";
+                        "long long step, int threads_per_block, cudaStream_t *streams_calculate ){\n";
             } else {
                 code += "void doit(long long start, long long n_items,\n"
                         "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
@@ -1845,9 +1845,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block ){\n";
+                        "long long step, int threads_per_block, cudaStream_t *streams_calculate){\n";
             }
-            code += "   doit_kernel<<<(n_items+threads_per_block-1)/threads_per_block,threads_per_block>>>(start, n_items,\n"
+            code += "   doit_kernel<<<(n_items+threads_per_block-1)/threads_per_block,threads_per_block,0,*streams_calculate>>>(start, n_items,\n"
                     "       time, dt, global_constants, global_const_f32_index, \n"
                     "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,\n"
                     "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,\n"
@@ -1855,7 +1855,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     "       global_state_table_i64_sizes, global_state_table_i64_arrays, global_stateNext_table_i64_arrays, global_table_state_i64_index,\n"
                     "       global_state, global_stateNext, global_state_f32_index, \n"
                     "       step);\n"
-                    "   // cudaDeviceSynchronize();\n"
                     "}\n" ;
         }
 

@@ -19,15 +19,7 @@ typedef void ( *IterationCallback)(
 	
 );
 
-typedef void ( * GPUIterationCallback )(
-        long long start, long long n_items,
-        double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index,
-        const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,
-        const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,
-        const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,
-        const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,
-        const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index,
-        long long step, int threads_per_block);
+
 
 //void UndefinedCallback(
 //	double time,

@@ -136,7 +136,7 @@ if(CUDA_FOUND)
     set_target_properties(eden PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_options(eden PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
             -G
-            --generate-line-info
+            -lineinfo
             --use_fast_math
             --relocatable-device-code=true
             >)
