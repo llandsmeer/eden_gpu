@@ -166,7 +166,7 @@ public:
 
     void populate_print_buffer() override{
         //this should copy the state now into the print buffer. so it can be printed without worries :D
-        std::memcpy(m_global_print_buffer, m_global_state_now, state->state_one.size()*sizeof(state->state_one[0]));
+        std::memcpy(m_global_print_buffer, m_global_state_next, state->state_one.size()*sizeof(state->state_one[0]));
     };
 
 

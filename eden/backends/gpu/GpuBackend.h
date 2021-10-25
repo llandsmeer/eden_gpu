@@ -85,7 +85,7 @@ public:
     }
 
     void populate_print_buffer() override{
-        std::swap(m_Host_state_now, m_Host_print_buffer);
+        std::swap(m_Host_state_next, m_Host_print_buffer);
     };
 
     void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) override {

@@ -117,7 +117,7 @@ int main(int argc, char **argv){
             if(step > 1){
                 backend->populate_print_buffer();
                 auto sn_f32 = engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0;
-                trajectory_logger->write_output_logs(engine_config, time-engine_config.dt,
+                trajectory_logger->write_output_logs(engine_config, time - engine_config.dt,
                                                      backend->print_buffer(),
                                                     /* needed on mpi: */sn_f32);
             }
