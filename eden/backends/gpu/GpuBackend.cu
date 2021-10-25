@@ -4,6 +4,11 @@
 
 #include "GpuBackend.h"
 
+//Todo find a way to pass the stream to the calculate kernel
+
+cudaStream_t streams_copy;
+cudaStream_t streams_calculate;
+
 #define CUDA_CHECK_RETURN(value) {										\
 	cudaError_t _m_cudaStat = value;									\
 	if (_m_cudaStat != cudaSuccess) {									\
@@ -15,13 +20,25 @@
 		exit(1);														\
 	} }
 
-void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time, int threads_per_block) {
 
-    CUDA_CHECK_RETURN(cudaMemcpyAsync(
-            m_Host_state_now,
-            m_global_state_now,
-            state->state_one.size()*sizeof(state->state_one[0]),
-            cudaMemcpyDeviceToHost));
+void GpuBackend::init(){
+    //create the Statebuffers
+    state = new StateBuffers(tabs);
+
+    //create the copy back host pointers
+    m_Host_state_now = state->state_one.data();
+    m_Host_state_next = state->state_two.data();
+    m_Host_print_buffer = state->state_print_buffer.data();
+
+    CUDA_CHECK_RETURN(cudaStreamCreate(&streams_copy));
+    CUDA_CHECK_RETURN(cudaStreamCreate(&streams_calculate));
+
+
+    copy_data_to_device();
+
+}
+
+void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time, int threads_per_block) {
 
     const float dt = engine_config.dt;
 
@@ -66,6 +83,13 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
             fflush(stdout);
         }
     }
+
+    //copy back for printing of stuff.
+    CUDA_CHECK_RETURN(cudaMemcpyAsync(
+            m_Host_state_now,
+            m_global_state_now,
+            state->state_one.size()*sizeof(state->state_one[0]),
+            cudaMemcpyDeviceToHost,streams_copy));
 }
 
 float * GpuBackend::global_state_now() const {

@@ -16,22 +16,7 @@ public:
     ~GpuBackend() override{
         delete state;
     }
-    void init() override {
-        //create the Statebuffers
-        state = new StateBuffers(tabs);
-
-        //create the copy back host pointers
-        m_Host_state_now = state->state_one.data();
-        m_Host_state_next = state->state_two.data();
-        m_Host_print_buffer = state->state_print_buffer.data();
-
-        //do GPU stuff
-#ifdef USE_GPU
-        copy_data_to_device();
-#else
-        //should never happen
-#endif
-    }
+    void init() override;
 
 //    getters
 #ifdef USE_GPU
