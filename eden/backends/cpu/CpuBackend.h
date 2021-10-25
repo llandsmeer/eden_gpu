@@ -46,8 +46,8 @@ public:
 //    getters
     float * global_state_now() const override  { return m_global_state_now; }
     float * global_state_next() const  { return m_global_state_next; }
-    Table_F32 * global_tables_stateNow_f32 () const override  { return m_global_tables_stateNow_f32; }
-    Table_I64 * global_tables_stateNow_i64 () const  { return m_global_tables_stateNow_i64; }
+    Table_F32 * global_tables_stateNow_f32 () const override { return m_global_tables_stateNow_f32; }
+    Table_I64 * global_tables_stateNow_i64 () const override { return m_global_tables_stateNow_i64; }
     Table_F32 * global_tables_stateNext_f32() const  { return m_global_tables_stateNext_f32; }
     Table_I64 * global_tables_stateNext_i64() const  { return m_global_tables_stateNext_i64; }
 
@@ -56,7 +56,7 @@ public:
     long long * global_tables_const_f32_sizes() const  { return state->global_tables_const_f32_sizes.data(); }
     long long * global_tables_const_i64_sizes() const  { return state->global_tables_const_i64_sizes.data(); }
     long long * global_tables_state_f32_sizes() const  { return state->global_tables_state_f32_sizes.data(); }
-    long long * global_tables_state_i64_sizes() const  { return state->global_tables_state_i64_sizes.data(); }
+    long long * global_tables_state_i64_sizes() const override { return state->global_tables_state_i64_sizes.data(); }
 
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override {
@@ -70,7 +70,7 @@ public:
         //prepare for parallel iteration
         const float dt = engine_config.dt;
         // Execute all work items
-//#pragma omp parallel for schedule(runtime)
+        //#pragma omp parallel for schedule(runtime)
         for( long long item = 0; item < engine_config.work_items; item++ ){
             if(config.debug){
                 printf("item %lld start\n", item);
@@ -78,6 +78,7 @@ public:
                 // continue;
                 fflush(stdout);
             }
+
             tabs.callbacks[item]( time,
                                   dt,
                                   m_global_constants,
