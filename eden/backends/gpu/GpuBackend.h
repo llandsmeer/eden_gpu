@@ -10,9 +10,9 @@
 class GpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;
 public:
-    /* Pure CPU implementation just refers to existing state buffers */
-//    Init function
 
+  /* Pure CPU implementation just refers to existing state buffers */
+//    Init function
     ~GpuBackend() override{
         delete state;
     }

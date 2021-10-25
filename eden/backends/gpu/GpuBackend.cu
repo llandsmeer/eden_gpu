@@ -4,6 +4,7 @@
 
 #include "GpuBackend.h"
 
+//change the iteration Callback to also contain some GPU specifics.
 extern "C" {
 typedef void ( *GPUIterationCallback )(
         long long start, long long n_items,
@@ -19,11 +20,8 @@ typedef void ( *GPUIterationCallback )(
 }
 
 //Todo find a way to pass the stream to the calculate kernel
-
 cudaStream_t streams_copy;
 cudaStream_t streams_calculate;
-
-
 
 #define CUDA_CHECK_RETURN(value) {										\
 	cudaError_t _m_cudaStat = value;									\
@@ -49,9 +47,7 @@ void GpuBackend::init(){
     CUDA_CHECK_RETURN(cudaStreamCreate(&streams_copy));
     CUDA_CHECK_RETURN(cudaStreamCreate(&streams_calculate));
 
-
     copy_data_to_device();
-
 }
 
 void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time, int threads_per_block) {
