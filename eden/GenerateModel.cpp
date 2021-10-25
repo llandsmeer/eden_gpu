@@ -1681,7 +1681,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         char tmps[1000];
         code += "// Generated code block BEGIN\n";
         // code += "#include <stdatomic.h>\n";
-        code += "#define M_PI       3.14159265358979323846f\n";
+        code += "#define M_PI_F       3.14159265358979323846f\n";
         code += "#include <math.h>\n";
         if(config.debug){
             code += "#include <stdio.h>\n";
@@ -4184,9 +4184,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                             sprintf(tmps, "float shellThickness = local_constants[%zd];\n", distimpl.Index_Shellthickness_Or_RhoFactor); ionpool_code += tab+tmps;
                             // TODO check dimensions & units here !
-                            sprintf(tmps, "float effectiveRadius = sqrtf(Acomp / (4 * M_PI));\n" ); ionpool_code += tab+tmps;
+                            sprintf(tmps, "float effectiveRadius = sqrtf(Acomp / (4 * M_PI_F));\n" ); ionpool_code += tab+tmps;
                             sprintf(tmps, "float innerRadius = effectiveRadius - shellThickness;\n" ); ionpool_code += tab+tmps;
-                            sprintf(tmps, "float shellVolume = (4 * (effectiveRadius * effectiveRadius * effectiveRadius) * M_PI / 3) - (4 * (innerRadius * innerRadius * innerRadius) * M_PI / 3);\n"); ionpool_code += tab+tmps;
+                            sprintf(tmps, "float shellVolume = (4 * (effectiveRadius * effectiveRadius * effectiveRadius) * M_PI_F / 3) - (4 * (innerRadius * innerRadius * innerRadius) * M_PI_F / 3);\n"); ionpool_code += tab+tmps;
                             sprintf(tmps, "influx_rate = ( iCa / (ion_charge * Faraday * shellVolume) )%s;\n", CurrentToConcRate_suffix.c_str()); ionpool_code += tab+tmps;
                             // if( config.debug ){
                             //     ionpool_code += "        printf(\"effectiveRadius %e \\ninnerRadius %e\\nshellVolume %e\\n\", effectiveRadius, innerRadius, shellVolume);\n";
