@@ -5,6 +5,7 @@
 #ifndef EDEN_CPU_CPUBACKEND_H
 #define EDEN_CPU_CPUBACKEND_H
 
+#include <cstring>
 #include "../../AbstractBackend.h"
 
 class CpuBackend : public AbstractBackend {
@@ -30,6 +31,7 @@ public:
 
         m_global_state_now = state->state_one.data();
         m_global_state_next = state->state_two.data();
+        m_global_print_buffer = state->state_print_buffer.data();
 
         m_global_tables_stateNow_f32 = state->global_tables_stateOne_f32_arrays.data();
         m_global_tables_stateNow_i64 = state->global_tables_stateOne_i64_arrays.data();
@@ -45,6 +47,7 @@ public:
 
 //    getters
     float * global_state_now() const override  { return m_global_state_now; }
+    float * print_buffer() const override  { return m_global_print_buffer; }
     float * global_state_next() const  { return m_global_state_next; }
     Table_F32 * global_tables_stateNow_f32 () const override { return m_global_tables_stateNow_f32; }
     Table_I64 * global_tables_stateNow_i64 () const override { return m_global_tables_stateNow_i64; }
@@ -153,11 +156,20 @@ public:
             }
         }
     }
+
     void swap_buffers() override {
         std::swap(m_global_state_now, m_global_state_next);
         std::swap(m_global_tables_stateNow_f32, m_global_tables_stateNext_f32);
         std::swap(m_global_tables_stateNow_i64, m_global_tables_stateNext_i64);
+
     }
+
+    void populate_print_buffer() override{
+        //this should copy the state now into the print buffer. so it can be printed without worries :D
+        std::memcpy(m_global_print_buffer, m_global_state_now, state->state_one.size()*sizeof(state->state_one[0]));
+    };
+
+
     void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) override {
         if( config.dump_raw_state_scalar || config.dump_raw_state_table ){
             if( !initializing ){
@@ -192,6 +204,7 @@ private:
 
     float * m_global_state_now = nullptr;
     float * m_global_state_next = nullptr;
+    float * m_global_print_buffer = nullptr;
     Table_F32 * m_global_tables_stateNow_f32 = nullptr;
     Table_I64 * m_global_tables_stateNow_i64 = nullptr;
     Table_F32 * m_global_tables_stateNext_f32= nullptr;

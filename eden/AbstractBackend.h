@@ -16,9 +16,11 @@ public:
     virtual ~AbstractBackend() {};
     virtual void init() = 0;
     virtual void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) = 0;
+    virtual void populate_print_buffer() = 0;
     virtual void synchronize() const = 0;
     virtual void swap_buffers() = 0;
     virtual void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) = 0;
+    virtual float * print_buffer() const = 0;
     virtual float * global_state_now() const = 0;
     virtual Table_F32 * global_tables_stateNow_f32() const = 0;
     virtual Table_I64 * global_tables_stateNow_i64 () const = 0;

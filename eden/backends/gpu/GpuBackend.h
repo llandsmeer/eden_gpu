@@ -23,6 +23,7 @@ public:
         //create the copy back host pointers
         m_Host_state_now = state->state_one.data();
         m_Host_state_next = state->state_two.data();
+        m_Host_print_buffer = state->state_print_buffer.data();
 
         //do GPU stuff
 #ifdef USE_GPU
@@ -41,6 +42,7 @@ public:
     Table_F32 * global_tables_stateNow_f32 () const override  { return 0; }
 #endif
 
+    float * print_buffer() const override  { return m_Host_print_buffer; }
     float * global_state_next() const  { return m_global_state_next; }
     Table_I64 * global_tables_stateNow_i64 () const override { return m_global_tables_stateNow_i64; }
     Table_F32 * global_tables_stateNext_f32() const  { return m_global_tables_stateNext_f32; }
@@ -52,7 +54,6 @@ public:
     long long * global_tables_const_i64_sizes() const  { return state->global_tables_const_i64_sizes.data(); }
     long long * global_tables_state_f32_sizes() const  { return state->global_tables_state_f32_sizes.data(); }
     long long * global_tables_state_i64_sizes() const override { return state->global_tables_state_i64_sizes.data(); }
-
 
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override{
@@ -71,8 +72,8 @@ public:
         printf("NOOOOOO!!\n");
         exit(2);
 #endif
-
     };
+
     void swap_buffers() override {
         //GPU buffers
         std::swap(m_global_state_now, m_global_state_next);
@@ -82,6 +83,11 @@ public:
         //CPU buffers to print stuff
         std::swap(m_Host_state_now, m_Host_state_next);
     }
+
+    void populate_print_buffer() override{
+        std::swap(m_Host_state_now, m_Host_print_buffer);
+    };
+
     void dump_iteration(SimulatorConfig & config, bool initializing, double time, long long step) override {
         if( config.dump_raw_state_scalar || config.dump_raw_state_table ){
             if( !initializing ){
@@ -119,8 +125,9 @@ private:
     long long int* m_global_table_state_i64_index;
     long long int* m_global_state_f32_index;
 
-    float * m_Host_state_now = nullptr;
-    float * m_Host_state_next = nullptr;
+    float * m_Host_state_now    = nullptr;
+    float * m_Host_state_next   = nullptr;
+    float * m_Host_print_buffer = nullptr;
 
     float * m_global_state_now = nullptr;
     float * m_global_state_next = nullptr;

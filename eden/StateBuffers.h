@@ -13,6 +13,8 @@ struct StateBuffers {
     RawTables::Table_F32 state_one;
     RawTables::Table_F32 state_two;
 
+    RawTables::Table_F32 state_print_buffer;
+
     std::vector<RawTables::Table_F32>  tables_state_f32_one;
     std::vector<RawTables::Table_F32>  tables_state_f32_two;
     std::vector<RawTables::Table_I64>  tables_state_i64_one;
@@ -34,6 +36,7 @@ struct StateBuffers {
     StateBuffers(RawTables & tabs) :
                 state_one(tabs.global_initial_state),
                 state_two(tabs.global_initial_state.size(), NAN),
+                state_print_buffer(tabs.global_initial_state.size(), NAN),
                 tables_state_f32_one(tabs.global_tables_state_f32_arrays),
                 tables_state_i64_one(tabs.global_tables_state_i64_arrays)
     {
