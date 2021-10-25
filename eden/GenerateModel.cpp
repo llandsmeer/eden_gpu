@@ -963,7 +963,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     //printf("node %d \n", node);
                     auto &term = tab[node];
                     if(term.type == Term::VALUE){
-                        out += accurate_string(term.value);
+                        out += "((float)" + accurate_string(term.value) + ")";
                         dim_out = Dimension::Unity();
                     }
                     else if(term.type == Term::SYMBOL){
@@ -1681,7 +1681,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         char tmps[1000];
         code += "// Generated code block BEGIN\n";
         // code += "#include <stdatomic.h>\n";
-        code += "#define M_PI       3.14159265358979323846\n";
+        code += "#define M_PI       3.14159265358979323846f\n";
         code += "#include <math.h>\n";
         if(config.debug){
             code += "#include <stdio.h>\n";
@@ -1758,7 +1758,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             code += "static ";
         }
         if (engine_config.trove) {
-            code += "void DEVICE_FUNC " + kernel_name + "( double time, float dt, trove::coalesced_ptr<float> global_constants, long long const_local_index, \n"
+            code += "void DEVICE_FUNC " + kernel_name + "( float time, float dt, trove::coalesced_ptr<float> global_constants, long long const_local_index, \n"
                                                         "trove::coalesced_ptr<long long> global_const_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_const_table_f32_arrays, long long table_cf32_local_index,\n"
                                                         "trove::coalesced_ptr<long long> global_const_table_i64_sizes, trove::coalesced_ptr<Table_I64> global_const_table_i64_arrays, long long table_ci64_local_index,\n"
                                                         "trove::coalesced_ptr<long long> global_state_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_state_table_f32_arrays, trove::coalesced_ptr<Table_F32> global_stateNext_table_f32_arrays, long long table_sf32_local_index,\n"
@@ -1766,7 +1766,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                                                         "trove::coalesced_ptr<float> global_state, trove::coalesced_ptr<float> global_stateNext, long long state_local_index, \n"
                                                         "long long step ){\n";
         } else {
-            code += "void DEVICE_FUNC " + kernel_name + "( double time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
+            code += "void DEVICE_FUNC " + kernel_name + "( float time, float dt, const float *__restrict__ global_constants, long long const_local_index, \n"
                                                         "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long table_cf32_local_index,\n"
                                                         "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long table_ci64_local_index,\n"
                                                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long table_sf32_local_index,\n"
@@ -1797,7 +1797,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         if (engine_config.backend == backend_kind_gpu) {
             if (engine_config.trove) {
                 code += "static void __global__ doit_kernel(long long start, long long n_items,\n"
-                        "double time, float dt, trove::coalesced_ptr<float> global_constants, trove::coalesced_ptr<long long>/*XXX*/ global_const_f32_index, \n"
+                        "float time, float dt, trove::coalesced_ptr<float> global_constants, trove::coalesced_ptr<long long>/*XXX*/ global_const_f32_index, \n"
                         "trove::coalesced_ptr<long long> global_const_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_const_table_f32_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_const_f32_index,\n"
                         "trove::coalesced_ptr<long long> global_const_table_i64_sizes, trove::coalesced_ptr<Table_I64> global_const_table_i64_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_const_i64_index,\n"
                         "trove::coalesced_ptr<long long> global_state_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_state_table_f32_arrays, trove::coalesced_ptr<Table_F32> global_stateNext_table_f32_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_state_f32_index,\n"
@@ -1806,7 +1806,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "long long step ){\n";
             } else {
                 code += "static void __global__ doit_kernel(long long start, long long n_items,\n"
-                        "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
+                        "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
                         "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
                         "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
@@ -1830,7 +1830,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             if (engine_config.trove) {
                 // hacky & ugly (we remove the const qualifiers)
                 code += "void doit(long long start, long long n_items,\n"
-                        "double time, float dt, float *__restrict__ global_constants, long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
+                        "float time, float dt, float *__restrict__ global_constants, long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
                         "long long *__restrict__ global_const_table_f32_sizes, Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
                         "long long *__restrict__ global_const_table_i64_sizes, Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
                         "long long *__restrict__ global_state_table_f32_sizes, Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
@@ -1839,7 +1839,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "long long step, int threads_per_block ){\n";
             } else {
                 code += "void doit(long long start, long long n_items,\n"
-                        "double time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
+                        "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
                         "const long long *__restrict__ global_const_table_f32_sizes, const Table_F32 *__restrict__ global_const_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_const_f32_index,\n"
                         "const long long *__restrict__ global_const_table_i64_sizes, const Table_I64 *__restrict__ global_const_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_const_i64_index,\n"
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
@@ -3422,13 +3422,13 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                                     std::size_t Index_Gate_Scale    = AppendConstant(rate.formula.scale,    for_what + " Scale");
 
                                     if(rate.type == IonChannel::Rate::EXPONENTIAL){
-                                        sprintf(tmps, "local_constants[%zd] * exp( (Vcomp - local_constants[%zd] ) / local_constants[%zd] );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
+                                        sprintf(tmps, "local_constants[%zd] * expf( (Vcomp - local_constants[%zd] ) / local_constants[%zd] );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
                                     }
                                     else if(rate.type == IonChannel::Rate::EXPLINEAR){
-                                        sprintf(tmps, "local_constants[%zd] * ( ( Vcomp == local_constants[%zd]) ? 1 : ( ( (Vcomp - local_constants[%zd] ) / local_constants[%zd] )  / (1 - exp( - (Vcomp - local_constants[%zd] ) / local_constants[%zd] ) ) ) );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Midpoint, Index_Gate_Scale, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
+                                        sprintf(tmps, "local_constants[%zd] * ( ( Vcomp == local_constants[%zd]) ? 1 : ( ( (Vcomp - local_constants[%zd] ) / local_constants[%zd] )  / (1 - expf( - (Vcomp - local_constants[%zd] ) / local_constants[%zd] ) ) ) );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Midpoint, Index_Gate_Scale, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
                                     }
                                     else if(rate.type == IonChannel::Rate::SIGMOID){
-                                        sprintf(tmps, "local_constants[%zd] / (1 + exp( (local_constants[%zd] - Vcomp ) / local_constants[%zd] ) );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
+                                        sprintf(tmps, "local_constants[%zd] / (1 + expf( (local_constants[%zd] - Vcomp ) / local_constants[%zd] ) );\n", Index_Gate_BaseRate, Index_Gate_Midpoint, Index_Gate_Scale); rate_code += tmps;
                                     }
                                 }
                                 else if( rate.type == IonChannel::Rate::FIXED ){
@@ -4055,7 +4055,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                                 ccde   += "    if( Vcomp == 0 ){\n";
                                 ccde   += "        pOpen = tmp * ( 1 - ( Ca_concentration / Ca_concentration_extra ) ) * (1e-3 "+UnitToVolt_suffix+");\n";
                                 ccde   += "    }else{\n";
-                                ccde   += "        pOpen = tmp * ( 1 - ( ( Ca_concentration / Ca_concentration_extra ) * expf( V / tmp ) ) ) * ( ( V / tmp ) / ( exp( V / tmp ) - 1) ) * (1e-3"+UnitToVolt_suffix+");\n";
+                                ccde   += "        pOpen = tmp * ( 1 - ( ( Ca_concentration / Ca_concentration_extra ) * expf( V / tmp ) ) ) * ( ( V / tmp ) / ( expf( V / tmp ) - 1) ) * (1e-3"+UnitToVolt_suffix+");\n";
                                 ccde   += "    }\n";
 
                                 ccde   += "    if( Ca_concentration_extra == 0 ){\n";
@@ -4184,7 +4184,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                             sprintf(tmps, "float shellThickness = local_constants[%zd];\n", distimpl.Index_Shellthickness_Or_RhoFactor); ionpool_code += tab+tmps;
                             // TODO check dimensions & units here !
-                            sprintf(tmps, "float effectiveRadius = sqrt(Acomp / (4 * M_PI));\n" ); ionpool_code += tab+tmps;
+                            sprintf(tmps, "float effectiveRadius = sqrtf(Acomp / (4 * M_PI));\n" ); ionpool_code += tab+tmps;
                             sprintf(tmps, "float innerRadius = effectiveRadius - shellThickness;\n" ); ionpool_code += tab+tmps;
                             sprintf(tmps, "float shellVolume = (4 * (effectiveRadius * effectiveRadius * effectiveRadius) * M_PI / 3) - (4 * (innerRadius * innerRadius * innerRadius) * M_PI / 3);\n"); ionpool_code += tab+tmps;
                             sprintf(tmps, "influx_rate = ( iCa / (ion_charge * Faraday * shellVolume) )%s;\n", CurrentToConcRate_suffix.c_str()); ionpool_code += tab+tmps;

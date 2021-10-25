@@ -79,7 +79,7 @@ public:
                 fflush(stdout);
             }
 
-            tabs.callbacks[item]( time,
+            tabs.callbacks[item]( (float)time,
                                   dt,
                                   m_global_constants,
                                   m_global_const_f32_index[item],
@@ -122,7 +122,7 @@ public:
             RawTables::ConsecutiveIterationCallbacks & cic = tabs.consecutive_kernels.at(idx);
 //#pragma omp parallel for schedule(runtime)
             for (size_t item = cic.start_item; item < cic.start_item + cic.n_items; item++) {
-                cic.callback( time,
+                cic.callback( (float)time,
                               dt,
                               m_global_constants,
                               m_global_const_f32_index[item],

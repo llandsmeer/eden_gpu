@@ -30,7 +30,7 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
         ((GPUIterationCallback)cic.callback) (
                           cic.start_item,
                           cic.n_items,
-                          time,
+                          (float)time,
                           dt,
                           m_global_constants,
                           m_global_const_f32_index,
