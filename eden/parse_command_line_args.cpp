@@ -114,9 +114,6 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		else if(arg == "debug_netcode"){
 			config.debug_netcode = true;
 		}
-        else if(arg == "debug_gpu_kernels") {
-            config.debug_gpu_kernels = true;
-        }
 		else if(arg == "-S"){
 			config.output_assembly = true;
 		}
@@ -136,8 +133,41 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
         else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }
+#ifdef USE_GPU
         else if(arg == "gpu") {
             engine_config.backend = backend_kind_gpu;
+        }
+        else if(arg == "trove") {
+            engine_config.trove = true;
+        }
+        else if(arg == "debug_gpu_kernels") {
+            config.debug_gpu_kernels = true;
+        }
+#endif
+#ifdef USE_MPI
+        else if(arg == "mpi") {
+            engine_config.use_mpi = true;
+        }
+#endif
+        else if(arg == "dump_array_locations") {
+            config.dump_array_locations = true;
+        }
+        else if(arg == "threads_per_block") {
+            if(i == argc - 1){
+                log(LOG_ERR) << "cmdline: "<<  arg.c_str() << "value missing" << LOG_ENDL;
+                exit(1);
+            }
+            const std::string stpb = argv[i+1];
+            int threads_per_block;
+            if( sscanf( stpb.c_str(), "%d", &threads_per_block ) == 1 ){
+                engine_config.threads_per_block = threads_per_block;
+            }
+            else{
+                log(LOG_ERR) <<"cmdline: "<< arg.c_str() <<" must be a reasonably-sized integer, not " << stpb.c_str() << LOG_ENDL;
+                exit(1);
+            }
+
+            i++; // used following token too
         }
 		else{
 			//unknown, skip it
@@ -149,6 +179,10 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		log(LOG_ERR) << "NeuroML model not selected (select one with nml <file> in command line)" << LOG_ENDL;
 		exit(2);
 	}
+    if (engine_config.backend != backend_kind_gpu && engine_config.trove) {
+		log(LOG_WARN) << "Can not use TROVE in CPU mode" << LOG_ENDL;
+        engine_config.trove = false;
+    }
 	gettimeofday(&config_end, NULL);
 	config_time_sec = TimevalDeltaSec(config_start, config_end);
 }

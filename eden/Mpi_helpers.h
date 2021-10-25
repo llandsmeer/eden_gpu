@@ -3,6 +3,7 @@
 
 #include "EngineConfig.h"
 #include "StateBuffers.h"
+#include "AbstractBackend.h"
 
 #ifdef USE_MPI
 #include "TypePun.h"
@@ -12,46 +13,50 @@
 // MPI context, just a few globals like world size, rank etc.
 static void Say(const char *format, ... ){
     FILE *fLog = stdout;
-	va_list args;
-	va_start(args, format);
-	int dit;
-	MPI_Comm_rank(MPI_COMM_WORLD, &dit);
+    va_list args;
+    va_start(args, format);
+    int dit;
+    MPI_Comm_rank(MPI_COMM_WORLD, &dit);
     std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
-	vfprintf(fLog, new_format.c_str(), args);
-	fflush(stdout);
-	va_end (args);
+    vfprintf(fLog, new_format.c_str(), args);
+    fflush(stdout);
+    va_end (args);
 }
 #endif
 
 static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
+    if (!Engine->use_mpi) return;
 #ifdef USE_MPI
     // first of first of all, replace argc and argv
-	// Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
-	MPI_Init(&argc, &argv);
-	// Get the number of processes
+    // Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
+    MPI_Init(&argc, &argv);
+    // Get the number of processes
     MPI_Comm_size(MPI_COMM_WORLD, &Engine->my_mpi.world_size);
     // Get the rank of the process
     MPI_Comm_rank(MPI_COMM_WORLD, &Engine->my_mpi.rank);
-	char processor_name[MPI_MAX_PROCESSOR_NAME];
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
 
-	if(1){
-		printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
+    if(1){
+        printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
 
-		if( Engine->my_mpi.rank != 0 ){
-			char tmps[555];
-			sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
-			freopen(tmps,"w",stdout);
-			stderr = stdout;
-		}
-	}
+        if( Engine->my_mpi.rank != 0 ){
+            char tmps[555];
+            sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
+            freopen(tmps,"w",stdout);
+            stderr = stdout;
+        }
+    }
 #endif
 }
 
 
 #ifdef USE_MPI
 struct MpiBuffers {
+private:
+    bool actually_using_mpi = false;
+public:
     typedef std::vector<float> SendRecvBuf;
     std::vector<int> send_off_to_node;
     std::vector< SendRecvBuf > send_bufs;
@@ -65,11 +70,13 @@ struct MpiBuffers {
     std::vector<bool> received_sends;
 
     MpiBuffers(EngineConfig & engine_config) :
-        send_requests( send_off_to_node.size(), MPI_REQUEST_NULL ),
-        recv_requests( recv_off_to_node.size(), MPI_REQUEST_NULL ),
-        received_probes( recv_off_to_node.size(), false),
-        received_sends( recv_off_to_node.size(), false)
+        send_requests( engine_config.sendlist_impls.size(), MPI_REQUEST_NULL ),
+        recv_requests( engine_config.recvlist_impls.size(), MPI_REQUEST_NULL ),
+        received_probes( engine_config.recvlist_impls.size(), false),
+        received_sends( engine_config.recvlist_impls.size(), false)
     {
+        if (!engine_config.use_mpi) return;
+        actually_using_mpi = true;
         printf("Allocating comm buffers...\n");
         for( const auto &keyval : engine_config.sendlist_impls ){
             send_off_to_node.push_back( keyval.first );
@@ -83,11 +90,12 @@ struct MpiBuffers {
         }
     }
 
-    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {
-        float * global_state_now = state->state_one.data();
-        Table_F32 *global_tables_stateNow_f32  = state->global_tables_stateOne_f32_arrays.data();
-        Table_I64 *global_tables_stateNow_i64  = state->global_tables_stateOne_i64_arrays.data();
-        long long * global_tables_state_i64_sizes = state->global_tables_state_i64_sizes.data();
+    void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {
+        if (!engine_config.use_mpi) return;
+        float     * global_state_now                = backend->global_state_now();
+        Table_F32 * global_tables_stateNow_f32      = backend->global_tables_stateNow_f32();
+        Table_I64 * global_tables_stateNow_i64      = backend->global_tables_stateNow_i64();
+        long long * global_tables_state_i64_sizes   = backend->global_tables_state_i64_sizes();
 
         auto NetMessage_ToString = []( size_t buf_value_len, const auto &buf ){
             std::string str;
@@ -100,6 +108,7 @@ struct MpiBuffers {
             }
             return str;
         };
+
         // Send info needed by other nodes
         // TODO try parallelizing buffer fill, see if it improves latency
         for( size_t idx = 0; idx < send_off_to_node.size(); idx++ ){
@@ -124,7 +133,6 @@ struct MpiBuffers {
             // NB make sure these buffers are synchronized with CPU memory LATER
             for( size_t i = 0; i < sendlist_impl.vpeer_positions_in_globstate.size(); i++ ){
                 size_t off = sendlist_impl.vpeer_positions_in_globstate[i];
-
                 buf[ vpeer_buf_idx + i ] = global_state_now[off];
             }
 
@@ -146,7 +154,7 @@ struct MpiBuffers {
 
                 // TODO packed bool buffers
                 if( SpikeTable[i] ){
-                    // add index	
+                    // add index
                     buf.push_back(  EncodeI32ToF32(i) );
                     // clear trigger flag for the timestep after the next one
                     SpikeTable[i] = 0;
@@ -159,7 +167,7 @@ struct MpiBuffers {
         }
 
         // Recv info needed by this node
-        auto PostRecv = []( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
+        auto PostRecv = [&config]( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
             MPI_Irecv( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &recv_req );
         };
         auto ReceiveList = [ &engine_config, &global_tables_stateNow_f32, &global_tables_stateNow_i64 ]( const EngineConfig::RecvList_Impl &recvlist_impl, std::vector<float> &buf ){
@@ -202,7 +210,6 @@ struct MpiBuffers {
                 // otherwise it's pending
                 all_received = false;
 
-
                 auto &buf = recv_bufs[idx];
                 auto &req = recv_requests[idx];
 
@@ -244,21 +251,24 @@ struct MpiBuffers {
         received_sends .assign( received_sends .size(), false );
     }
 
-    void finish_communicate() {
+    void finish_communicate(EngineConfig & engine_config) {
+        if (!engine_config.use_mpi) return;
         // wait for sends, to finish the iteration
         MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE );
     }
 
     ~MpiBuffers () {
         // this is necessary, so stdio files are actually flushed
-        MPI_Finalize();
+        if (actually_using_mpi) {
+            MPI_Finalize();
+        }
     }
 };
 #else
 struct MpiBuffers {
     MpiBuffers(EngineConfig & engine_config) {}
-    void init_communicate(EngineConfig & engine_config, StateBuffers * state, SimulatorConfig & config) {}
-    void finish_communicate() {}
+    void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {}
+    void finish_communicate(EngineConfig & engine_config) {}
 };
 #endif
 #endif

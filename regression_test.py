@@ -1,6 +1,9 @@
 import pandas as pd
 import os
 
+PLOT_ON_FAILURE = False
+TEST_MPI = False
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -28,9 +31,16 @@ def system(cmd, gpu=False, submit=True):
 
 final = []
 
-def verify(nmlfile, output, target, gpu=True):
-    system(f'build/eden {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
+def verify(nmlfile, output, target, gpu=True, nmpi=None):
+    if nmpi is not None:
+        pre = f'mpirun -np {nmpi}'
+    else:
+        pre = ''
+    system(f'{pre} build/eden {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
     toolchain = "GPU" if gpu else "CPU"
+    testcase = toolchain
+    if nmpi is not None:
+        testcase = testcase+f'/mpi={nmpi}'
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
     out = pd.read_csv(output, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
@@ -40,15 +50,24 @@ def verify(nmlfile, output, target, gpu=True):
     for i in range(4):
         target = ref[i].values
         pred = out[i].values
-        error = (abs(target - pred) / target.ptp()).max()
-        max_error = max(error, max_error)
-        if not error < 0.02:
-            msg = f'{bcolors.FAIL}{toolchain}|{nmlfile}: REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}'
+        try:
+            error = (abs(target - pred) / target.ptp()).max()
+        except:
+            fail = True
+            msg = f'{bcolors.FAIL}{testcase}|{nmlfile}: REPRODUCTION ERROR=COULD NOT READ DATA!!{bcolors.ENDC}'
             final.append(msg)
             print(msg)
             fail = True
+            break
+        max_error = max(error, max_error)
+        if not error < 0.02:
+            msg = f'{bcolors.FAIL}{testcase}|{nmlfile}: REPRODUCTION ERROR={error*100:.2f}%!!{bcolors.ENDC}'
+            final.append(msg)
+            print(msg)
+            fail = True
+            break
 
-    if fail:
+    if fail and PLOT_ON_FAILURE:
         import matplotlib.pyplot as plt
         for i in range(1, 4):
             plt.plot(out[0], out[i], color='black')
@@ -56,16 +75,25 @@ def verify(nmlfile, output, target, gpu=True):
         plt.show()
         exit(1)
 
-    else:
-        msg = f'{bcolors.OKGREEN}{toolchain}|{nmlfile}: VALIDATION PASS (max error={max_error*100:.2f}%){bcolors.ENDC}'
+    elif not fail:
+        msg = f'{bcolors.OKGREEN}{testcase}|{nmlfile}: VALIDATION PASS (max error={max_error*100:.2f}%){bcolors.ENDC}'
         final.append(msg)
         print(msg)
 
-system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake ..; make -j 2"')
+if TEST_MPI:
+    system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake -DUSE_MPI=ON  ..; make -j 4"')
+else:
+    system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake -DUSE_MPI=OFF ..; make -j 4"')
+
 verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
 verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+
+if TEST_MPI:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
 
 print('(-- logs repeated here --)')
 for msg in final:

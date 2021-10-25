@@ -96,6 +96,7 @@ int main(int argc, char **argv){
 
         //debug mem layout
         if(config.dump_raw_layout) backend->state->dump_raw_layout(backend->tabs);
+        if(config.dump_array_locations) backend->state->dump_array_locations(backend->tabs);
 
         //Initialize MPI
          mpi_buffers = new MpiBuffers(engine_config);
@@ -113,22 +114,24 @@ int main(int argc, char **argv){
             bool initializing = step <= 0;
 
             //init mpi communication --> empty call if no mpi compilation
-            mpi_buffers->init_communicate(engine_config, backend->state, config); // need to copy between backend & state when using mpi
+            mpi_buffers->init_communicate(engine_config, backend, config); // need to copy between backend & state when using mpi
 
             //execute the actual work items
             backend->execute_work_items(engine_config, config, (int)step, time);
 
             //dont check on initializing check on step < 0
             if (!initializing) {
+                auto sn_f32 = engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0;
                 trajectory_logger->write_output_logs(engine_config, time,
-                                                    backend->global_state_now(), /* needed on mpi???: */backend->global_tables_stateNow_f32());
+                                                    backend->global_state_now(),
+                                                    /* needed on mpi: */sn_f32);
             }
 
             //dump to CMD CLI
             backend->dump_iteration(config, initializing, time, step);
 
             //waith for all the MPI communication to be done.
-            mpi_buffers->finish_communicate();
+            mpi_buffers->finish_communicate(engine_config);
 
             // check on step
             if (!initializing) time += engine_config.dt;

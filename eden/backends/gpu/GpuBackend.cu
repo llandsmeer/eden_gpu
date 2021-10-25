@@ -15,18 +15,18 @@
 		exit(1);														\
 	} }
 
-void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time) {
+void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &config, int step, double time, int threads_per_block) {
     const float dt = engine_config.dt;
     for (size_t idx = 0; idx < tabs.consecutive_kernels.size(); idx++) {
 
+
+        RawTables::ConsecutiveIterationCallbacks & cic = tabs.consecutive_kernels.at(idx);
         if(config.debug){
-            printf("consecutive items %lld start\n", (long long)idx);
+            printf("consecutive item %lld (start %ld length %ld) start\n", (long long)idx, (long)cic.start_item, (long)cic.n_items);
             // if(my_mpi.rank != 0) continue;
             // continue;
             fflush(stdout);
         }
-
-        RawTables::ConsecutiveIterationCallbacks & cic = tabs.consecutive_kernels.at(idx);
         ((GPUIterationCallback)cic.callback) (
                           cic.start_item,
                           cic.n_items,
@@ -51,7 +51,8 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
                           m_global_state_now,
                           m_global_state_next,
                           m_global_state_f32_index,
-                          step
+                          step,
+                          threads_per_block
             );
 
         if(config.debug){

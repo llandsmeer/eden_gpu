@@ -36,7 +36,7 @@ public:
 #endif
 
     float * global_state_next() const  { return m_global_state_next; }
-    Table_I64 * global_tables_stateNow_i64 () const  { return m_global_tables_stateNow_i64; }
+    Table_I64 * global_tables_stateNow_i64 () const override { return m_global_tables_stateNow_i64; }
     Table_F32 * global_tables_stateNext_f32() const  { return m_global_tables_stateNext_f32; }
     Table_I64 * global_tables_stateNext_i64() const  { return m_global_tables_stateNext_i64; }
 
@@ -45,13 +45,13 @@ public:
     long long * global_tables_const_f32_sizes() const  { return state->global_tables_const_f32_sizes.data(); }
     long long * global_tables_const_i64_sizes() const  { return state->global_tables_const_i64_sizes.data(); }
     long long * global_tables_state_f32_sizes() const  { return state->global_tables_state_f32_sizes.data(); }
-    long long * global_tables_state_i64_sizes() const  { return state->global_tables_state_i64_sizes.data(); }
+    long long * global_tables_state_i64_sizes() const override { return state->global_tables_state_i64_sizes.data(); }
 
 
 //    functionality
     void execute_work_items(EngineConfig & engine_config, SimulatorConfig & config, int step, double time) override{
 #ifdef USE_GPU
-        execute_work_gpu(engine_config,config, step, time);
+        execute_work_gpu(engine_config,config, step, time, engine_config.threads_per_block);
 #else
         printf("NOOOOOO!!\n");
         exit(2);
@@ -94,7 +94,7 @@ public:
     }
 
 #ifdef USE_GPU
-    void execute_work_gpu(EngineConfig & engine_config, SimulatorConfig & config, int step, double time);
+    void execute_work_gpu(EngineConfig & engine_config, SimulatorConfig & config, int step, double time, int threads_per_block);
     bool copy_data_to_device();
     static void synchronize_gpu();
 #endif

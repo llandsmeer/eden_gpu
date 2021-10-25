@@ -17,7 +17,7 @@ struct SimulatorConfig{
 	bool dump_raw_state_scalar;
 	bool dump_raw_state_table;
 	bool dump_raw_layout;
-    bool dump_array_locations = false;
+	bool dump_array_locations = false;
 	
 	bool use_icc;
 	bool tweak_lmvec;

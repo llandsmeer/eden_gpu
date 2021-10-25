@@ -8,7 +8,7 @@ struct TabEntryRef{
 	// could also use the compressed, encoded combination
 };
 typedef long long TabEntryRef_Packed;
-auto GetEncodedTableEntryId = []( long long global_idx_T_dest_table, long long entry_idx_T_dest ){
+static auto GetEncodedTableEntryId = []( long long global_idx_T_dest_table, long long entry_idx_T_dest ){
 	// pack 1 trillion tables -> 16 million entries into 64bit indexes, upgrade if needed LATER
 	
 	const unsigned long long table_id = global_idx_T_dest_table * (1 << 24);
@@ -17,7 +17,7 @@ auto GetEncodedTableEntryId = []( long long global_idx_T_dest_table, long long e
 	
 	return packed_id;
 };
-auto GetDecodedTableEntryId = [  ]( unsigned long long packed_id ){
+static auto GetDecodedTableEntryId = [  ]( unsigned long long packed_id ){
 	long long global_idx_T_dest_table = packed_id >> 24;
 	int entry_idx_T_dest = packed_id % (1 << 24);
 	TabEntryRef ret = { global_idx_T_dest_table, entry_idx_T_dest };

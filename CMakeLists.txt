@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
+include(CMakeDependentOption)
 
 # Fixed..
 
@@ -19,6 +20,8 @@ find_package(FLEX REQUIRED)
 set(CMAKE_EXPORT_COMPILE_COMMANDS "YES")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -Wno-unused-result -Wno-unused-function -lm -g -fopenmp")
+
+option(USE_MPI "build with MPI support" OFF)
 
 # ---> Default resources minimal to creat an build of eden
 set(DEFAULT_SOURCES_LIB
@@ -63,51 +66,54 @@ endif(CUDA_FOUND)
 
 # <---
 # ---> MPI resources to build with MPI communication if applicable.
-find_package(MPI)
-if(MPI_FOUND)
-    message("STATUS [Eden] MPI enabled")
-    add_definitions(-DUSE_MPI)
 
-    # Check if openMPI is build cuda aware.
-    EXECUTE_PROCESS (COMMAND "ompi_info" --parsable --all COMMAND "grep" "mpi_built_with_cuda_support:value" OUTPUT_VARIABLE OMPI_CUDA_OUTPUT)
-    IF (DEFINED OMPI_CUDA_OUTPUT)
+if(USE_MPI)
+    find_package(MPI)
+    if(MPI_FOUND)
+        message("STATUS [Eden] MPI enabled")
+        add_definitions(-DUSE_MPI)
 
-        # The output to stdout may have an endline, so we have to do a
-        # string search, not just a comparison.  It's possible that
-        # neither "true" nor "false" are found, so we test both.
-        STRING (FIND "${OMPI_CUDA_OUTPUT}" "mca:mpi:base:param:mpi_built_with_cuda_support:value:true"  OMPI_INFO_OUTPUT_FOUND_TRUE)
-        STRING (FIND "${OMPI_CUDA_OUTPUT}" "mca:mpi:base:param:mpi_built_with_cuda_support:value:false" OMPI_INFO_OUTPUT_FOUND_FALSE)
+        # Check if openMPI is build cuda aware.
+        EXECUTE_PROCESS (COMMAND "ompi_info" --parsable --all COMMAND "grep" "mpi_built_with_cuda_support:value" OUTPUT_VARIABLE OMPI_CUDA_OUTPUT)
+        IF (DEFINED OMPI_CUDA_OUTPUT)
 
-        IF (NOT (OMPI_INFO_OUTPUT_FOUND_TRUE EQUAL -1))
-            MESSAGE (STATUS  "[Eden]  \"ompi_info\" explicitly claims that your MPI implementation is CUDA aware.")
-            SET (OMPI_INFO_OUTPUT_FOUND_FALSE ON)
+            # The output to stdout may have an endline, so we have to do a
+            # string search, not just a comparison.  It's possible that
+            # neither "true" nor "false" are found, so we test both.
+            STRING (FIND "${OMPI_CUDA_OUTPUT}" "mca:mpi:base:param:mpi_built_with_cuda_support:value:true"  OMPI_INFO_OUTPUT_FOUND_TRUE)
+            STRING (FIND "${OMPI_CUDA_OUTPUT}" "mca:mpi:base:param:mpi_built_with_cuda_support:value:false" OMPI_INFO_OUTPUT_FOUND_FALSE)
 
-        ELSEIF (NOT (OMPI_INFO_OUTPUT_FOUND_FALSE EQUAL -1))
-            MESSAGE (STATUS "[Eden]  \"ompi_info\" explicitly claims that your MPI implementation is NOT CUDA aware.  You may want to use a different OpenMPI installation that is CUDA aware.  For details: https://www.open-mpi.org/faq/?category=runcuda")
+            IF (NOT (OMPI_INFO_OUTPUT_FOUND_TRUE EQUAL -1))
+                MESSAGE (STATUS  "[Eden]  \"ompi_info\" explicitly claims that your MPI implementation is CUDA aware.")
+                SET (OMPI_INFO_OUTPUT_FOUND_FALSE ON)
+
+            ELSEIF (NOT (OMPI_INFO_OUTPUT_FOUND_FALSE EQUAL -1))
+                MESSAGE (STATUS "[Eden]  \"ompi_info\" explicitly claims that your MPI implementation is NOT CUDA aware.  You may want to use a different OpenMPI installation that is CUDA aware.  For details: https://www.open-mpi.org/faq/?category=runcuda")
+            ELSE ()
+                MESSAGE (STATUS "[Eden]  \"ompi_info\" doesn' know  whether your MPI implementation is CUDA aware. output: \"${OMPI_CUDA_OUTPUT}\".")
+            ENDIF ()
         ELSE ()
-            MESSAGE (STATUS "[Eden]  \"ompi_info\" doesn' know  whether your MPI implementation is CUDA aware. output: \"${OMPI_CUDA_OUTPUT}\".")
+            MESSAGE (STATUS "[Eden] the ompi_info call did not return any sane information or did not run at all, assuming unaware, plz fix")
         ENDIF ()
-    ELSE ()
-        MESSAGE (STATUS "[Eden] the ompi_info call did not return any sane information or did not run at all, assuming unaware, plz fix")
-    ENDIF ()
 
-    if (NOT (OMPI_INFO_OUTPUT_FOUND_TRUE EQUAL -1))
-        add_definitions(-DMPI_CUDA_AWARE)
-    endif()
+        if (NOT (OMPI_INFO_OUTPUT_FOUND_TRUE EQUAL -1))
+            add_definitions(-DMPI_CUDA_AWARE)
+        endif()
 
-    # Check on Cray systems if MPICH is RDMA enabled aka cuda aware
-    if($ENV{MPICH_RDMA_ENABLED_CUDA})
-        MESSAGE (STATUS "[Eden] Cray tells us that MPI is CUDA aware")
-        add_definitions(-DMPI_CUDA_AWARE)
-    endif()
+        # Check on Cray systems if MPICH is RDMA enabled aka cuda aware
+        if($ENV{MPICH_RDMA_ENABLED_CUDA})
+            MESSAGE (STATUS "[Eden] Cray tells us that MPI is CUDA aware")
+            add_definitions(-DMPI_CUDA_AWARE)
+        endif()
 
-#    add sources here:
-    set(MPI_SOURCES_LIB
+    #    add sources here:
+        set(MPI_SOURCES_LIB
 
-            )
-else ()
-    message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
-endif(MPI_FOUND)
+                )
+    else ()
+        message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
+    endif(MPI_FOUND)
+endif()
 # <---
 
 add_executable(eden
