@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 include(CMakeDependentOption)
 
 # Fixed..
@@ -129,16 +129,18 @@ target_include_directories(eden PUBLIC
     ${CMAKE_SOURCE_DIR}/eden/neuroml
     ${CMAKE_BINARY_DIR})
 
+
 target_link_libraries(eden PRIVATE cJSON pugixml ${CMAKE_DL_LIBS})
 
-
-#if(CUDA_FOUND)
-#    message(WARNING this-should-be-commented-out-on-Cray-systems)
-#    #    set_property(TARGET simHH PROPERTY CUDA_ARCHITECTURES 30 70)
-#    target_link_libraries(simHH PRIVATE ${CUDA_LIBRARIES})
-#    target_link_libraries(simHH PUBLIC  ${CUDA_LIBRARIES})
-#endif(CUDA_FOUND)
-
+if(CUDA_FOUND)
+    set_target_properties(eden PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    target_compile_options(eden PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+            -G
+            --generate-line-info
+            --use_fast_math
+            --relocatable-device-code=true
+            >)
+endif(CUDA_FOUND)
 
 if(MPI_FOUND)
     include_directories(SYSTEM ${MPI_INCLUDE_PATH})
