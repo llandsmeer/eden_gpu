@@ -796,9 +796,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         virtual size_t Constant( Real default_value, const std::string &for_what ) const = 0;
         virtual size_t StateVariable( Real default_value, const std::string &for_what ) const = 0;
 
-        virtual std::string ReferTo_Const( size_t index ) const = 0;
-        virtual std::string ReferTo_State( size_t index ) const = 0;
-        virtual std::string ReferTo_StateNext( size_t index ) const = 0;
+        virtual std::string ReferTo_Const( size_t index , bool address = false) const = 0;
+        virtual std::string ReferTo_State( size_t index , bool address = false) const = 0;
+        virtual std::string ReferTo_StateNext( size_t index , bool address = false) const = 0;
     };
     /*
     LEMS component implementation:
@@ -884,14 +884,26 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             return Index;
         }
 
-        virtual std::string ReferTo_Const( size_t index ) const {
-            return "local_constants["+itos(index)+"]";
+        virtual std::string ReferTo_Const( size_t index , bool address) const {
+            if (address) {
+                return "(local_constant + "+itos(index)+")";
+            } else {
+                return "local_constants["+itos(index)+"]";
+            }
         }
-        virtual std::string ReferTo_State( size_t index ) const {
-            return "local_state["+itos(index)+"]";
+        virtual std::string ReferTo_State( size_t index , bool address) const {
+            if (address) {
+                return "(local_state+ "+itos(index)+")";
+            } else {
+                return "local_state["+itos(index)+"]";
+            }
         }
-        virtual std::string ReferTo_StateNext( size_t index ) const {
-            return "local_stateNext["+itos(index)+"]";
+        virtual std::string ReferTo_StateNext( size_t index , bool address) const {
+            if (address) {
+                return "(local_stateNext + "+itos(index)+")";
+            } else {
+                return "local_stateNext["+itos(index)+"]";
+            }
         }
 
         CellInternalSignature::WorkItemDataSignature &wig;
@@ -937,14 +949,18 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             return StateVariable( NAN, for_what );
         }
 
-        virtual std::string ReferTo_Const( size_t index ) const {
+        virtual std::string ReferTo_Const( size_t index , bool address) const {
             return "local_const_table_f32_arrays["+itos(index)+"][instance]";
         }
-        virtual std::string ReferTo_State( size_t index ) const {
+        virtual std::string ReferTo_State( size_t index , bool address) const {
             return "local_state_table_f32_arrays["+itos(index)+"][instance]";
         }
-        virtual std::string ReferTo_StateNext( size_t index ) const {
-            return "local_stateNext_table_f32_arrays["+itos(index)+"][instance]";
+        virtual std::string ReferTo_StateNext( size_t index , bool address) const {
+            if (address) {
+                return "&(local_stateNext_table_f32_arrays["+itos(index)+"][instance])";
+            } else {
+                return "local_stateNext_table_f32_arrays["+itos(index)+"][instance]";
+            }
         }
         CellInternalSignature::WorkItemDataSignature &wig;
         SignatureAppender_Table( CellInternalSignature::WorkItemDataSignature &_w )
@@ -1389,7 +1405,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             return ret;
         }
         // Assume assigned values have already been defined, this updates state variables (rates, conditions etc.)
-        static std::string Update(const ComponentType &type, const DimensionSet &dimensions, const CellInternalSignature::ComponentSubSignature &subsig, const ISignatureAppender *Add, const std::string &for_what, const std::string &line_prefix, Int &random_call_counter, bool debug = false){
+        static std::string Update(EngineConfig * engine_config, const ComponentType &type, const DimensionSet &dimensions, const CellInternalSignature::ComponentSubSignature &subsig, const ISignatureAppender *Add, const std::string &for_what, const std::string &line_prefix, Int &random_call_counter, bool debug = false){
 
             const auto &tab = line_prefix; // for a more convenient name
             char tmps[2000];
@@ -1425,7 +1441,11 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 auto expression_string = ExpressionInfix(assign.value, type, dimensions, random_call_counter);
                 ret += tab+tmps+expression_string+";\n";
                 for( auto assigned_seq : statevar_to_assigned[state_seq] ){
-                    sprintf(tmps, "        Lems_assigned_%d = &(%s) ", assigned_seq, Add->ReferTo_StateNext(Index).c_str() );
+                    if (engine_config->trove) {
+                        sprintf(tmps, "        Lems_assigned_%d = %s ", assigned_seq, Add->ReferTo_StateNext(Index, true).c_str() );
+                    } else {
+                        sprintf(tmps, "        Lems_assigned_%d = &(%s) ", assigned_seq, Add->ReferTo_StateNext(Index).c_str() );
+                    }
                     ret += tab+tmps+ ";\n";
                 }
             };
@@ -1553,6 +1573,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         Int &random_call_counter; // XXX convert to allocator
         const SignatureAppender_Single &AppendSingle;
         const SignatureAppender_Table &AppendMulti;
+        EngineConfig * engine_config;
 
         // TODO return bool for error handling
 
@@ -1573,7 +1594,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             // also add integration code here, to finish with component code (and get event outputs !)
             code += tab+"// integrate inline\n";
-            std::string lemsupdate = DescribeLems::Update(comptype, model.dimensions, component, &AppendSingle, for_what, tab, random_call_counter, debug);
+            std::string lemsupdate = DescribeLems::Update(engine_config, comptype, model.dimensions, component, &AppendSingle, for_what, tab, random_call_counter, debug);
             code += lemsupdate;
 
             code += tab+"// expose inline\n";
@@ -1635,7 +1656,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 code += lemscode;
 
                 code += tab+"// integrate inline\n";
-                std::string lemsupdate = DescribeLems::Update(comptype, model.dimensions, compsubsig, &AppendMulti ,for_what, tab, random_call_counter, debug);
+                std::string lemsupdate = DescribeLems::Update(engine_config, comptype, model.dimensions, compsubsig, &AppendMulti ,for_what, tab, random_call_counter, debug);
                 code += lemsupdate;
             }
 
@@ -1667,8 +1688,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             return code;
         }
 
-        InlineLems_AllocatorCoder( const Model &_m, Int &_cc, const SignatureAppender_Single &_as, const SignatureAppender_Table &_am )
-                : model(_m), random_call_counter(_cc), AppendSingle(_as), AppendMulti(_am) {
+        InlineLems_AllocatorCoder(EngineConfig & _engine_config, const Model &_m, Int &_cc, const SignatureAppender_Single &_as, const SignatureAppender_Table &_am )
+                : model(_m), random_call_counter(_cc), AppendSingle(_as), AppendMulti(_am), engine_config(&_engine_config) {
 
         }
     };
@@ -1907,7 +1928,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // cell-level work items for now
         SignatureAppender_Single AppendSingle_CellScope( sig.cell_wig );
         SignatureAppender_Table AppendMulti_CellScope( sig.cell_wig );
-        InlineLems_AllocatorCoder DescribeLemsInline_CellScope( model, sig.cell_wig.random_call_counter, AppendSingle_CellScope, AppendMulti_CellScope );
+        InlineLems_AllocatorCoder DescribeLemsInline_CellScope(engine_config, model, sig.cell_wig.random_call_counter, AppendSingle_CellScope, AppendMulti_CellScope );
 
         // standardize the nomenclature, yay!
         // <context>_<value or table>_<const, state, stateNext>
@@ -3099,7 +3120,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             auto ImplementInternalCompartmentIntegration = [
                     &config,
                     &model, &ion_channels, &conc_models, &ion_species, &dimensions, &component_types, &microns,
-                    &ImplementSynapseType, &ImplementInputSource
+                    &ImplementSynapseType, &ImplementInputSource,
+                    &engine_config
             ](
                     const SignatureAppender_Single &AppendSingle, const SignatureAppender_Table &AppendMulti,
                     const InlineLems_AllocatorCoder &DescribeLemsInline,
@@ -4209,7 +4231,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         ionpool_code += lemscode;
 
                         // numerical integration code here
-                        std::string lemsupdate = DescribeLems::Update(comptype, model.dimensions, distimpl.component, &AppendSingle, for_what, tab, random_call_counter, config.debug );
+                        std::string lemsupdate = DescribeLems::Update(&engine_config, comptype, model.dimensions, distimpl.component, &AppendSingle, for_what, tab, random_call_counter, config.debug );
                         ionpool_code += lemsupdate;
 
                         ionpool_code += DescribeLems::Exposures(comptype, for_what, tab, config.debug);
@@ -4542,7 +4564,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 // isolate/generate the per-compartment code block, to group identical ones
                 auto AllocateCreateFullSegmentCode = [
                         &ImplementInternalCompartmentIntegration, &AllocateCreatePostIntegrationCode,
-                        &model, &cell_cable_solver, &bioph
+                        &model, &cell_cable_solver, &bioph, &engine_config
                 ](
                         size_t comp_seq,
                         const std::string &for_what,
@@ -4556,7 +4578,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     SignatureAppender_Single AppendSingle_CompScope( wig );
                     SignatureAppender_Table AppendMulti_CompScope( wig );
 
-                    InlineLems_AllocatorCoder DescribeLemsInline_CompScope( model, wig.random_call_counter, AppendSingle_CompScope, AppendMulti_CompScope );
+                    InlineLems_AllocatorCoder DescribeLemsInline_CompScope(engine_config, model, wig.random_call_counter, AppendSingle_CompScope, AppendMulti_CompScope );
 
                     if( !ImplementInternalCompartmentIntegration(
                             AppendSingle_CompScope, AppendMulti_CompScope, DescribeLemsInline_CompScope,
@@ -4916,8 +4938,13 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     sprintf(tmps, "    const long long Instances = local_state_table_i64_sizes[%zd]; //same for all parallel arrays\n", inpimpl.Table_SpikeListPos ); ccde += tab+tmps;
 
                     sprintf(tmps, "const float *Spike_Times = local_const_table_f32_arrays[%zd];\n", table_Times); ccde += tab+tmps;
-                    sprintf(tmps, "const float *Position  = &local_state    [%zd];\n", table_Posit); ccde += tab+tmps;
-                    sprintf(tmps, "      float *PositNext = &local_stateNext[%zd];\n", table_Posit); ccde += tab+tmps;
+                    if (engine_config.trove) {
+                        sprintf(tmps, "const float *Position  = local_state    [%zd].ref();\n", table_Posit); ccde += tab+tmps;
+                        sprintf(tmps, "      float *PositNext = local_stateNext[%zd].ref();\n", table_Posit); ccde += tab+tmps;
+                    } else {
+                        sprintf(tmps, "const float *Position  = &local_state    [%zd];\n", table_Posit); ccde += tab+tmps;
+                        sprintf(tmps, "      float *PositNext = &local_stateNext[%zd];\n", table_Posit); ccde += tab+tmps;
+                    }
 
                     // TODO wrap into a reqstring ?
                     ccde   += tab+"{\n";
@@ -5038,7 +5065,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                     // also add integration code here, to finish with component code (and get event outputs !)
                     ccde += tab+"// integrate inline\n";
-                    std::string lemsupdate = DescribeLems::Update(comptype, model.dimensions, component, &AppendSingle, for_what, tab, cell_wig.random_call_counter, config.debug && 0 );
+                    std::string lemsupdate = DescribeLems::Update(&engine_config, comptype, model.dimensions, component, &AppendSingle, for_what, tab, cell_wig.random_call_counter, config.debug && 0 );
                     ccde += lemsupdate;
 
                     ccde += tab+"// expose inline\n";
