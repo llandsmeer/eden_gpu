@@ -1688,6 +1688,22 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         }
         if (engine_config.trove) {
             code += "#include <trove/ptr.h>\n";
+            code += "template<typename T>\n"
+                    "struct trove_at_index {\n"
+                    "    T * m_ptr;\n"
+                    "    size_t offset;\n"
+                    "    __device__ trove_at_index(trove::coalesced_ptr<T> _base, size_t _offset) : m_ptr(_base.m_ptr), offset(_offset) {\n"
+                    "    }\n"
+                    "    __device__ trove_at_index(trove_at_index<T> _base, size_t _offset) : m_ptr(_base.m_ptr), offset(_base.offset + _offset) {\n"
+                    "    }\n"
+                    "   template<typename I>\n"
+                    "   __device__ trove::detail::coalesced_ref<T> operator[](const I& idx) {\n"
+                    "       return trove::detail::coalesced_ref<T>(m_ptr + offset + idx);\n"
+                    "   }\n"
+                    "   __device__ operator T*() {\n"
+                    "        return m_ptr;\n"
+                    "    }\n"
+                    "};\n";
         }
         code += "#if defined(__CUDACC__)\n";
         code += "extern \"C\" {\n";
@@ -1899,26 +1915,47 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // just like the work-item context is a slice of the global data space
         // Try not to over-use, to avoid overhead! Flatten wherever possible!
         // TODO make everything tabular, after all, and special-case flatten small vectors or sth
-        auto ExposeSubitemContext = []( const std::string &to_context, const std::string &from_context, const std::string &tab ){
+        auto ExposeSubitemContext = [&engine_config]( const std::string &to_context, const std::string &from_context, const std::string &tab ){
             std::string code;
 
             const auto &by = from_context, &to = to_context;
 
-            code +=   "    const float *"+to+"_constants = "+by+"_constants + const_"+to+"_index;\n";
-            code +=   "    const float *"+to+"_state     = "+by+"_state     + state_"+to+"_index;\n";
-            code +=   "          float *"+to+"_stateNext = "+by+"_stateNext + state_"+to+"_index;\n";
-            code +=   "    \n";
 
-            code += tab+"\tconst long long *"+to+"_const_table_f32_sizes      = "+by+"_const_table_f32_sizes      + table_cf32_"+to+"_index;\n";
-            code += tab+"\tconst Table_F32 *"+to+"_const_table_f32_arrays     = "+by+"_const_table_f32_arrays     + table_cf32_"+to+"_index;\n";
-            code += tab+"\tconst long long *"+to+"_const_table_i64_sizes      = "+by+"_const_table_i64_sizes      + table_ci64_"+to+"_index;\n";
-            code += tab+"\tconst Table_I64 *"+to+"_const_table_i64_arrays     = "+by+"_const_table_i64_arrays     + table_ci64_"+to+"_index;\n";
-            code += tab+"\tconst long long *"+to+"_state_table_f32_sizes      = "+by+"_state_table_f32_sizes      + table_sf32_"+to+"_index;\n";
-            code += tab+"\tconst Table_F32 *"+to+"_state_table_f32_arrays     = "+by+"_state_table_f32_arrays     + table_sf32_"+to+"_index;\n";
-            code += tab+"\t      Table_F32 *"+to+"_stateNext_table_f32_arrays = "+by+"_stateNext_table_f32_arrays + table_sf32_"+to+"_index;\n";
-            code += tab+"\tconst long long *"+to+"_state_table_i64_sizes      = "+by+"_state_table_i64_sizes      + table_si64_"+to+"_index;\n";
-            code += tab+"\t      Table_I64 *"+to+"_state_table_i64_arrays     = "+by+"_state_table_i64_arrays     + table_si64_"+to+"_index;\n";
-            code += tab+"\t      Table_I64 *"+to+"_stateNext_table_i64_arrays = "+by+"_stateNext_table_i64_arrays + table_si64_"+to+"_index;\n";
+            if (engine_config.trove) {
+                code +=   "    trove_at_index<float> "+to+"_constants("+by+"_constants, const_"+to+"_index);\n";
+                code +=   "    trove_at_index<float> "+to+"_state("+by+"_state, state_"+to+"_index);\n";
+                code +=   "    trove_at_index<float> "+to+"_stateNext("+by+"_stateNext, state_"+to+"_index);\n";
+                //code +=   "    const float *"+to+"_state     = "+by+"_state     + state_"+to+"_index;\n";
+                //code +=   "          float *"+to+"_stateNext = "+by+"_stateNext + state_"+to+"_index;\n";
+                code +=   "    \n";
+
+                code += tab+"\tconst long long *"+to+"_const_table_f32_sizes      = "+by+"_const_table_f32_sizes      + table_cf32_"+to+"_index;\n";
+                code += tab+"\tconst Table_F32 *"+to+"_const_table_f32_arrays     = "+by+"_const_table_f32_arrays     + table_cf32_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_const_table_i64_sizes      = "+by+"_const_table_i64_sizes      + table_ci64_"+to+"_index;\n";
+                code += tab+"\tconst Table_I64 *"+to+"_const_table_i64_arrays     = "+by+"_const_table_i64_arrays     + table_ci64_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_state_table_f32_sizes      = "+by+"_state_table_f32_sizes      + table_sf32_"+to+"_index;\n";
+                code += tab+"\tconst Table_F32 *"+to+"_state_table_f32_arrays     = "+by+"_state_table_f32_arrays     + table_sf32_"+to+"_index;\n";
+                code += tab+"\t      Table_F32 *"+to+"_stateNext_table_f32_arrays = "+by+"_stateNext_table_f32_arrays + table_sf32_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_state_table_i64_sizes      = "+by+"_state_table_i64_sizes      + table_si64_"+to+"_index;\n";
+                code += tab+"\t      Table_I64 *"+to+"_state_table_i64_arrays     = "+by+"_state_table_i64_arrays     + table_si64_"+to+"_index;\n";
+                code += tab+"\t      Table_I64 *"+to+"_stateNext_table_i64_arrays = "+by+"_stateNext_table_i64_arrays + table_si64_"+to+"_index;\n";
+            } else {
+                code +=   "    const float *"+to+"_constants = "+by+"_constants + const_"+to+"_index;\n";
+                code +=   "    const float *"+to+"_state     = "+by+"_state     + state_"+to+"_index;\n";
+                code +=   "          float *"+to+"_stateNext = "+by+"_stateNext + state_"+to+"_index;\n";
+                code +=   "    \n";
+
+                code += tab+"\tconst long long *"+to+"_const_table_f32_sizes      = "+by+"_const_table_f32_sizes      + table_cf32_"+to+"_index;\n";
+                code += tab+"\tconst Table_F32 *"+to+"_const_table_f32_arrays     = "+by+"_const_table_f32_arrays     + table_cf32_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_const_table_i64_sizes      = "+by+"_const_table_i64_sizes      + table_ci64_"+to+"_index;\n";
+                code += tab+"\tconst Table_I64 *"+to+"_const_table_i64_arrays     = "+by+"_const_table_i64_arrays     + table_ci64_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_state_table_f32_sizes      = "+by+"_state_table_f32_sizes      + table_sf32_"+to+"_index;\n";
+                code += tab+"\tconst Table_F32 *"+to+"_state_table_f32_arrays     = "+by+"_state_table_f32_arrays     + table_sf32_"+to+"_index;\n";
+                code += tab+"\t      Table_F32 *"+to+"_stateNext_table_f32_arrays = "+by+"_stateNext_table_f32_arrays + table_sf32_"+to+"_index;\n";
+                code += tab+"\tconst long long *"+to+"_state_table_i64_sizes      = "+by+"_state_table_i64_sizes      + table_si64_"+to+"_index;\n";
+                code += tab+"\t      Table_I64 *"+to+"_state_table_i64_arrays     = "+by+"_state_table_i64_arrays     + table_si64_"+to+"_index;\n";
+                code += tab+"\t      Table_I64 *"+to+"_stateNext_table_i64_arrays = "+by+"_stateNext_table_i64_arrays + table_si64_"+to+"_index;\n";
+            }
 
             return code;
         };
@@ -3023,12 +3060,22 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             sprintf(tmps, "    const float temperature = cell_constants[%zd]; //a global if there ever was one\n", Index_Temperature); sig.code += tmps;
 
             sig.code +=   "    \n";
-            sprintf(tmps, "    const float *V = &cell_state[%zd]; \n", pig.Index_Voltages); sig.code += tmps;
-            sprintf(tmps, "          float *V_next = &cell_stateNext[%zd]; \n", pig.Index_Voltages); sig.code += tmps;
-            sprintf(tmps, "    const float *R_Axial = &cell_constants[%zd]; \n", Index_AxialResistance); sig.code += tmps;
-            sprintf(tmps, "    const float *C = &cell_constants[%zd]; \n", Index_Capacitance); sig.code += tmps;
-            sprintf(tmps, "    const float *V_threshold = &cell_constants[%zd]; \n", Index_VoltageThreshold); sig.code += tmps;
-            sprintf(tmps, "    const float *Area = &cell_constants[%zd]; \n", Index_MembraneArea); sig.code += tmps;
+
+            if (engine_config.trove) {
+                sprintf(tmps, "    trove_at_index<float> V(cell_state, %zd); \n", pig.Index_Voltages); sig.code += tmps;
+                sprintf(tmps, "    trove_at_index<float> V_next(cell_stateNext, %zd); \n", pig.Index_Voltages); sig.code += tmps;
+                sprintf(tmps, "    trove_at_index<float> R_Axial(cell_constants, %zd); \n", Index_AxialResistance); sig.code += tmps;
+                sprintf(tmps, "    trove_at_index<float> C(cell_constants, %zd); \n", Index_Capacitance); sig.code += tmps;
+                sprintf(tmps, "    trove_at_index<float> V_threshold(cell_constants, %zd); \n", Index_VoltageThreshold); sig.code += tmps;
+                sprintf(tmps, "    trove_at_index<float> Area(cell_constants, %zd); \n", Index_MembraneArea); sig.code += tmps;
+            } else {
+                sprintf(tmps, "    const float *V = &cell_state[%zd]; \n", pig.Index_Voltages); sig.code += tmps;
+                sprintf(tmps, "          float *V_next = &cell_stateNext[%zd]; \n", pig.Index_Voltages); sig.code += tmps;
+                sprintf(tmps, "    const float *R_Axial = &cell_constants[%zd]; \n", Index_AxialResistance); sig.code += tmps;
+                sprintf(tmps, "    const float *C = &cell_constants[%zd]; \n", Index_Capacitance); sig.code += tmps;
+                sprintf(tmps, "    const float *V_threshold = &cell_constants[%zd]; \n", Index_VoltageThreshold); sig.code += tmps;
+                sprintf(tmps, "    const float *Area = &cell_constants[%zd]; \n", Index_MembraneArea); sig.code += tmps;
+            }
 
             sig.code += "    \n";
 
