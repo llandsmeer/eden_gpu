@@ -116,6 +116,12 @@ if(USE_MPI)
 endif()
 # <---
 
+if(MPI_FOUND)
+    if(CUDA_FOUND)
+        set(MPI_CXX_LIB mpi_cxx)
+    endif(CUDA_FOUND)
+endif(MPI_FOUND)
+
 add_executable(eden
         ${DEFAULT_SOURCES_LIB}
         ${MPI_SOURCES_LIB}
@@ -129,7 +135,7 @@ target_include_directories(eden PUBLIC
     ${CMAKE_SOURCE_DIR}/eden/neuroml
     ${CMAKE_BINARY_DIR})
 
-target_link_libraries(eden PRIVATE cJSON pugixml ${CMAKE_DL_LIBS})
+target_link_libraries(eden PRIVATE cJSON pugixml ${CMAKE_DL_LIBS} ${MPI_CXX_LIB})
 
 
 #if(CUDA_FOUND)
