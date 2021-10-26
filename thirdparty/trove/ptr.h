@@ -55,6 +55,8 @@ struct coalesced_ref {
         return *this;
     }
 
+//Cell_type_0_code.gen.cu(1859): error: no operator "-=" matches these operands
+//            operand types are: trove::detail::coalesced_ref<float> -= float
     __device__ coalesced_ref& operator-=(const T& update) {
         if (warp_converged()) {
             T data = detail::load_dispatch(m_ptr);
