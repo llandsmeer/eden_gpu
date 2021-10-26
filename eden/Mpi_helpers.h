@@ -9,7 +9,6 @@
 #include "TypePun.h"
 #include <mpi.h>
 
-//    TODO HIER
 // MPI context, just a few globals like world size, rank etc.
 static void Say(const char *format, ... ){
     FILE *fLog = stdout;
@@ -51,7 +50,6 @@ static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
 #endif
 }
 
-
 #ifdef USE_MPI
 struct MpiBuffers {
 private:
@@ -92,10 +90,11 @@ public:
 
     void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {
         if (!engine_config.use_mpi) return;
-        float     * global_state_now                = backend->global_state_now();
-        Table_F32 * global_tables_stateNow_f32      = backend->global_tables_stateNow_f32();
-        Table_I64 * global_tables_stateNow_i64      = backend->global_tables_stateNow_i64();
-        long long * global_tables_state_i64_sizes   = backend->global_tables_state_i64_sizes();
+
+        float     * global_state_now                = backend->host_state_now();
+        Table_F32 * global_tables_stateNow_f32      = backend->host_tables_stateNow_f32();
+        Table_I64 * global_tables_stateNow_i64      = backend->host_tables_stateNow_i64();
+        long long * global_tables_state_i64_sizes   = backend->host_tables_state_i64_sizes();
 
         auto NetMessage_ToString = []( size_t buf_value_len, const auto &buf ){
             std::string str;
@@ -141,13 +140,12 @@ public:
                 auto &col = sendlist_impl.daw_columns[i];
                 size_t off = col.entry;
                 // also apply scaling, so receiving node won't bother
-
                 buf[ daw_buf_idx + i ] = global_state_now[ off ] * col.scaleFactor ;
             }
 
             size_t spikebuf_off = sendlist_impl.spike_mirror_buffer;
             // get the spikes into the buffer (variable size)
-            Table_I64 SpikeTable = global_tables_stateNow_i64[spikebuf_off];
+            Table_I64 SpikeTable      = global_tables_stateNow_i64[spikebuf_off];
             long long SpikeTable_size = global_tables_state_i64_sizes[spikebuf_off];
 
             for( int i = 0; i < SpikeTable_size; i++ ){
@@ -165,6 +163,7 @@ public:
             }
             MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
         }
+
 
         // Recv info needed by this node
         auto PostRecv = [&config]( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
@@ -266,7 +265,7 @@ public:
 };
 #else
 struct MpiBuffers {
-    MpiBuffers(EngineConfig & engine_config) {}
+    explicit MpiBuffers(EngineConfig & engine_config) {}
     void init_communicate(EngineConfig & engine_config, AbstractBackend * backend, SimulatorConfig & config) {}
     void finish_communicate(EngineConfig & engine_config) {}
 };
