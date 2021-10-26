@@ -113,12 +113,12 @@ int main(int argc, char **argv){
         // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
         for (long long step = -3; time <= engine_config.t_final; step++) {
 
-            //Start and check the output logger
+//            Start and check the output logger
             if(step > 1){
                 backend->populate_print_buffer();
-                auto sn_f32 = engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0;
+                auto sn_f32 = engine_config.use_mpi ? backend->print_tables_stateNow_f32() : nullptr;
                 trajectory_logger->write_output_logs(engine_config, time - engine_config.dt,
-                                                     backend->print_buffer(),
+                                                     backend->print_state_now(),
                                                     /* needed on mpi: */sn_f32);
             }
 
@@ -142,12 +142,15 @@ int main(int argc, char **argv){
 
             //swap the double buffering idea.
             backend->swap_buffers();
+
+//            getchar();
         }
 
         //----> fix the last printing to the outputfile one can just select the global_state_now for this.
-        auto sn_f32 = engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0;
+        backend->populate_print_buffer();
+        auto sn_f32 = engine_config.use_mpi ? backend->print_tables_stateNow_f32() : 0;
         trajectory_logger->write_output_logs(engine_config, time-engine_config.dt,
-                                             backend->global_state_now(),
+                                             backend->print_state_now(),
                 /* needed on mpi: */sn_f32);
 
         metadata.run_time_sec = run_timer.delta();
