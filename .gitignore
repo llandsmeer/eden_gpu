@@ -11,3 +11,4 @@ result*
 .ccls-cache/
 /c
 eden/CMakeFiles
+log*

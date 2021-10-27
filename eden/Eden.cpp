@@ -17,6 +17,9 @@ Extensible Dynamics Engine for Networks
 Parallel simulation engine for ODE-based models
 */
 
+
+//Fixen van MPI meuk voor output logger
+
 //standard libs
 
 // Local includes
@@ -110,8 +113,14 @@ int main(int argc, char **argv){
         // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
         for (long long step = -3; time <= engine_config.t_final; step++) {
 
-            // we don't need to keep setting this variable i think however if statement is worse.
-            bool initializing = step <= 0;
+//            Start and check the output logger
+            if(step > 1){
+                backend->populate_print_buffer();
+                auto sn_f32 = engine_config.use_mpi ? backend->print_tables_stateNow_f32() : nullptr;
+                trajectory_logger->write_output_logs(engine_config, time - engine_config.dt,
+                                                     backend->print_state_now(),
+                                                    /* needed on mpi: */sn_f32);
+            }
 
             //init mpi communication --> empty call if no mpi compilation
             mpi_buffers->init_communicate(engine_config, backend, config); // need to copy between backend & state when using mpi
@@ -119,28 +128,36 @@ int main(int argc, char **argv){
             //execute the actual work items
             backend->execute_work_items(engine_config, config, (int)step, time);
 
-            //dont check on initializing check on step < 0
-            if (!initializing) {
-                auto sn_f32 = engine_config.use_mpi ? backend->global_tables_stateNow_f32() : 0;
-                trajectory_logger->write_output_logs(engine_config, time,
-                                                    backend->global_state_now(),
-                                                    /* needed on mpi: */sn_f32);
-            }
-
             //dump to CMD CLI
-            backend->dump_iteration(config, initializing, time, step);
+            backend->dump_iteration(config, (step <= 0), time, step);
 
             //waith for all the MPI communication to be done.
             mpi_buffers->finish_communicate(engine_config);
 
             // check on step
-            if (!initializing) time += engine_config.dt;
+            if (step > 0) time += engine_config.dt;
+
+            //synchronize the backend.
+            backend->synchronize();
 
             //swap the double buffering idea.
             backend->swap_buffers();
+
+//            getchar();
         }
+
+        //----> fix the last printing to the outputfile one can just select the global_state_now for this.
+        backend->populate_print_buffer();
+        auto sn_f32 = engine_config.use_mpi ? backend->print_tables_stateNow_f32() : 0;
+        trajectory_logger->write_output_logs(engine_config, time-engine_config.dt,
+                                             backend->print_state_now(),
+                /* needed on mpi: */sn_f32);
+
         metadata.run_time_sec = run_timer.delta();
     }
+
+
+
 
 //----> Print meta overeview
     metadata.print();
