@@ -1,8 +1,10 @@
 import pandas as pd
 import os
 
-PLOT_ON_FAILURE = False
+PLOT_ON_FAILURE = True
 TEST_MPI = True
+TEST_CPU = True
+TEST_GPU = True
 
 class bcolors:
     HEADER = '\033[95m'
@@ -25,21 +27,24 @@ def system(cmd, gpu=False, submit=True):
     print(f'{bcolors.HEADER}Executing {cmd}{bcolors.ENDC}')
     status = os.system(cmd)
     if status != 0:
+        print(cmd)
         print(f'{bcolors.FAIL}FAILED, exit code = {status}{bcolors.ENDC}')
         exit(status)
 
 final = []
 
-def verify(nmlfile, output, target, gpu=True, nmpi=None):
+def verify(nmlfile, output, target, gpu=True, nmpi=None, extra_flags=""):
     if nmpi is not None:
         pre = f'mpirun -np {nmpi}'
     else:
         pre = ''
-    system(f'{pre} build/eden {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
+    system(f'{pre} build/eden {extra_flags} {"mpi" if nmpi is not None else ""} {"gpu" if gpu else ""} nml {nmlfile}', gpu=gpu, submit=True)
     toolchain = "GPU" if gpu else "CPU"
     testcase = toolchain
     if nmpi is not None:
         testcase = testcase+f'/mpi={nmpi}'
+    if extra_flags:
+        testcase += extra_flags.replace(' ', '/')
 
     ref = pd.read_csv(target, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
     out = pd.read_csv(output, sep=' +', header=None, engine='python', na_values=['+nan', '-nan'])
@@ -84,18 +89,29 @@ if TEST_MPI:
 else:
     system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake -DUSE_MPI=OFF ..; make -j 4"')
 
-# verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
-# verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
-verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+if TEST_CPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
 
-# if TEST_MPI:
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=1)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=2)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=4)
+if TEST_GPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels')
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='threads_per_block 1')
+
+if TEST_MPI and TEST_CPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
+
+if TEST_MPI and TEST_GPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=4)
 
 
 print('(-- logs repeated here --)')

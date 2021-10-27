@@ -1851,22 +1851,34 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
                         "long long step, long long int size_of_shared_memory ){\n";
             }
-            code += "                                                           \n"
-                    "   //Now populate the shared memory for this block         \n"
-                    "   int idx = blockIdx.x * blockDim.x + threadIdx.x;                             \n"
-                    "   extern __shared__ float global_const_shared[];                        \n"
+            code += "                                                           \n";
+            if(config.debug) {
+                code += "  printf(\"block %d %d %d \\n\", blockIdx.x,blockDim.x,threadIdx.x); \n";
+            }
+            code += "   //Now populate the shared memory for this block                    \n"
+                    "   int idx = blockIdx.x * blockDim.x + threadIdx.x;                   \n"
+                    "   extern __shared__ float global_const_shared[];                     \n"
                     "\n"
-                    "\n"
-                    "   for (long long int q = 0; q < size_of_shared_memory/blockDim.x; q++) {                         \n"
-                    "       global_const_shared[q*blockDim.x + threadIdx.x] = global_constants[q*blockDim.x + idx];\n"
-                    "   }                                                                              \n"
-                    "\n"
-                    "\n"
+                    "   for (long long int q = 0; q < (size_of_shared_memory+blockDim.x-1)/blockDim.x; q++) {                         \n"
+                    "         if(q*blockDim.x + threadIdx.x >=  size_of_shared_memory) continue;                           \n"
+                    "         global_const_shared[q*blockDim.x + threadIdx.x] = global_constants[q*blockDim.x + idx + global_const_f32_index[start] + blockIdx.x * (size_of_shared_memory-1)];\n";
+            if(config.debug) {
+            code += "         printf(\"global_const_shared[%ld] = global_constants[%ld]\\n\", q*blockDim.x + threadIdx.x, q*blockDim.x + idx + global_const_f32_index[start]+ blockIdx.x * size_of_shared_memory);\n";
+            }
+            code += "   }                                                                            \n"
                     "   //Normal Execution                                                           \n"
-                    "   if (idx >= n_items) return;\n"
-                    "   long long item = start + idx;\n"
-                    "   doit_single( time, dt, \n"
-                    "                      global_const_shared,             0,                                  global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+                    "   __syncthreads();                                                             \n"
+                    "   if (idx >= n_items) return;                                                  \n"
+                    "   long long item = start + idx;                                                \n"
+                    "   auto offs =   size_of_shared_memory;                                         \n"
+                    "   auto of   =   (global_const_f32_index[item]-global_const_f32_index[start]);     \n"
+                    "   auto offset = (global_const_f32_index[item]-global_const_f32_index[start]) % size_of_shared_memory;     \n";
+            if(config.debug) {
+
+                code += "  printf(\"block %d %d %d \\n offset for item %lld is %lld  -> %lld - %lld \\n\", blockIdx.x,blockDim.x,threadIdx.x,item, offset,of,offs); \n";
+            }
+            code +=  "   doit_single( time, dt, \n"
+                    "                      global_const_shared,             offset,                             global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
                     "                      global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
                     "                      global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
                     "                      global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
@@ -1881,7 +1893,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     "  //                    global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
                     "  //                    step \n"
                     "  //                    );\n"
-
                     "}\n";
 
             if (engine_config.trove) {
@@ -1893,7 +1904,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "long long *__restrict__ global_state_table_f32_sizes, Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block, cudaStream_t *streams_calculate ){\n";
+                        "long long step, int threads_per_block, ong long int size_of_shared_memory, cudaStream_t *streams_calculate ){\n";
             } else {
                 code += "void doit(long long start, long long n_items,\n"
                         "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
@@ -1902,7 +1913,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block, size_t size_of_shared_memory,  cudaStream_t *streams_calculate){\n";
+                        "long long step, int threads_per_block, long long int size_of_shared_memory,  cudaStream_t *streams_calculate){\n";
             }
             code += " //easter is around the corner when it snows                                                            \n"
                     "     //96KB memory of                                                                                   \n"
@@ -1911,7 +1922,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             if(config.debug) {
                 code += "printf(\"Max is de Max\\n\");                                                                       \n"
-                        "printf(\"start item: %ld n_items: %ld \\n\", start, n_items);                                       \n";
+                        "printf(\"start item: %lld n_items: %ld \\n\", start, n_items);                                      \n"
+                        "printf(\"size_of_shared_mem: %lld      \\n\", size_of_shared_memory);                               \n";
             }
             code += "  \n"
                     "doit_kernel<<<N_blocks,threads_per_block,size_of_shared_memory*sizeof(float),*streams_calculate>>>(start, n_items,                                \n"

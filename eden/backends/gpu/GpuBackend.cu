@@ -16,7 +16,7 @@ typedef void ( *GPUIterationCallback )(
         const long long *__restrict__ global_state_table_i64_sizes, Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays,
         long long *__restrict__ /*XXX*/ global_table_state_i64_index,
         const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long *__restrict__ global_state_f32_index,
-        long long step, int threads_per_block,  size_t size_of_shared_memory, cudaStream_t *streams_calculate);
+        long long step, int threads_per_block,  long long int size_of_shared_memory, cudaStream_t *streams_calculate);
 }
 
 //Todo find a way to pass the stream to the calculate kernel
@@ -237,15 +237,18 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
         //find size of shared memory for this kernel launch:
         long long int size_of_shared_memory = 0;
 
-
-
         if((cic.n_items + cic.start_item) == tabs.global_const_f32_index.size()){
             size_of_shared_memory = (long long int)tabs.global_constants.size() - tabs.global_const_f32_index[cic.start_item];
         }else{
             size_of_shared_memory = tabs.global_const_f32_index[cic.start_item+cic.n_items] - tabs.global_const_f32_index[cic.start_item];
         }
         const long long int N_blocks =  (long long int)(cic.n_items+threads_per_block-1)/threads_per_block;
-        size_of_shared_memory = size_of_shared_memory/N_blocks;
+
+        size_of_shared_memory = (size_of_shared_memory + N_blocks - 1)/N_blocks;
+
+        if(config.debug) {
+            printf("Before launching the kernel %d size_of_shared_memory %lld\n", idx, size_of_shared_memory);
+        }
 
         ((GPUIterationCallback)cic.callback) (
                           cic.start_item,
@@ -278,6 +281,7 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
             );
 
         if(config.debug){
+            synchronize_gpu();
             printf("consecutive items %lld end\n", (long long)idx);
             fflush(stdout);
         }
