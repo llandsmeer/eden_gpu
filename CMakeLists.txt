@@ -140,10 +140,7 @@ target_link_libraries(eden PRIVATE cJSON pugixml ${CMAKE_DL_LIBS} ${MPI_CXX_LIB}
 if(CUDA_FOUND)
     set_target_properties(eden PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_options(eden PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-            -G
-            -lineinfo
             --use_fast_math
-            --relocatable-device-code=true
             >)
 endif(CUDA_FOUND)
 
