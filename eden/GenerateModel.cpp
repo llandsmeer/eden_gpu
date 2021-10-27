@@ -1701,7 +1701,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
         char tmps[1000];
         code += "// Generated code block BEGIN\n";
-        // code += "#include <stdatomic.h>\n";
+        // code += "#include <stdatomic.h>\n";s
         code += "#define M_PI_F       3.14159265358979323846f\n";
         code += "#include <math.h>\n";
         if(config.debug){
@@ -1840,7 +1840,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "trove::coalesced_ptr<long long> global_state_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_state_table_f32_arrays, trove::coalesced_ptr<Table_F32> global_stateNext_table_f32_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_state_f32_index,\n"
                         "trove::coalesced_ptr<long long> global_state_table_i64_sizes, trove::coalesced_ptr<Table_I64> global_state_table_i64_arrays, trove::coalesced_ptr<Table_I64> global_stateNext_table_i64_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_state_i64_index,\n"
                         "trove::coalesced_ptr<float> global_state, trove::coalesced_ptr<float> global_stateNext, trove::coalesced_ptr<long long> global_state_f32_index, \n"
-                        "long long step ){\n";
+                        "long long step , long long int size_of_shared_memory){\n";
             } else {
                 code += "static void __global__ doit_kernel(long long start, long long n_items,\n"
                         "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
@@ -1849,19 +1849,39 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step ){\n";
+                        "long long step, long long int size_of_shared_memory ){\n";
             }
-            code += "   int idx = blockIdx.x * blockDim.x + threadIdx.x;\n"
+            code += "                                                           \n"
+                    "   //Now populate the shared memory for this block         \n"
+                    "   int idx = blockIdx.x * blockDim.x + threadIdx.x;                             \n"
+                    "   extern __shared__ float global_const_shared[];                        \n"
+                    "\n"
+                    "\n"
+                    "   for (long long int q = 0; q < size_of_shared_memory/blockDim.x; q++) {                         \n"
+                    "       global_const_shared[q*blockDim.x + threadIdx.x] = global_constants[q*blockDim.x + idx];\n"
+                    "   }                                                                              \n"
+                    "\n"
+                    "\n"
+                    "   //Normal Execution                                                           \n"
                     "   if (idx >= n_items) return;\n"
                     "   long long item = start + idx;\n"
                     "   doit_single( time, dt, \n"
-                    "                      global_constants,                global_const_f32_index[item],       global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+                    "                      global_const_shared,             0,                                  global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
                     "                      global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
                     "                      global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
                     "                      global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
                     "                      global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
                     "                      step \n"
                     "                      );\n"
+                    "  // doit_single( time, dt, \n"
+                    "  //                    global_constants,                global_const_f32_index[item],       global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+                    "  //                    global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
+                    "  //                    global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
+                    "  //                    global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
+                    "  //                    global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
+                    "  //                    step \n"
+                    "  //                    );\n"
+
                     "}\n";
 
             if (engine_config.trove) {
@@ -1882,16 +1902,26 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block, cudaStream_t *streams_calculate){\n";
+                        "long long step, int threads_per_block, size_t size_of_shared_memory,  cudaStream_t *streams_calculate){\n";
             }
-            code += "   doit_kernel<<<(n_items+threads_per_block-1)/threads_per_block,threads_per_block,0,*streams_calculate>>>(start, n_items,\n"
-                    "       time, dt, global_constants, global_const_f32_index, \n"
-                    "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,\n"
-                    "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,\n"
+            code += " //easter is around the corner when it snows                                                            \n"
+                    "     //96KB memory of                                                                                   \n"
+                    "                                                                                                        \n"
+                    "size_t N_blocks =  (n_items+threads_per_block-1)/threads_per_block;                                     \n";
+
+            if(config.debug) {
+                code += "printf(\"Max is de Max\\n\");                                                                       \n"
+                        "printf(\"start item: %ld n_items: %ld \\n\", start, n_items);                                       \n";
+            }
+            code += "  \n"
+                    "doit_kernel<<<N_blocks,threads_per_block,size_of_shared_memory*sizeof(float),*streams_calculate>>>(start, n_items,                                \n"
+                    "       time, dt, global_constants, global_const_f32_index,                                                                          \n"
+                    "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,                                   \n"
+                    "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,                                   \n"
                     "       global_state_table_f32_sizes, global_state_table_f32_arrays, global_stateNext_table_f32_arrays, global_table_state_f32_index,\n"
                     "       global_state_table_i64_sizes, global_state_table_i64_arrays, global_stateNext_table_i64_arrays, global_table_state_i64_index,\n"
                     "       global_state, global_stateNext, global_state_f32_index, \n"
-                    "       step);\n"
+                    "       step,size_of_shared_memory);\n"
                     "}\n" ;
         }
 
