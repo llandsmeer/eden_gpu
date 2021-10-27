@@ -35,12 +35,36 @@ template<typename T>
 struct coalesced_ref {
     T* m_ptr;
     __device__ explicit coalesced_ref(T* ptr) : m_ptr(ptr) {}
-    
+
     __device__ operator T() {
         return trove::load(m_ptr);
     }
     __device__ coalesced_ref& operator=(const T& data) {
         trove::store(data, m_ptr);
+        return *this;
+    }
+
+    __device__ coalesced_ref& operator+=(const T& update) {
+        if (warp_converged()) {
+            T data = detail::load_dispatch(m_ptr);
+            detail::store_dispatch(data + update, m_ptr);
+        } else {
+            T data = detail::divergent_load(m_ptr);
+            detail::divergent_store(data + update, m_ptr);
+        }
+        return *this;
+    }
+
+//Cell_type_0_code.gen.cu(1859): error: no operator "-=" matches these operands
+//            operand types are: trove::detail::coalesced_ref<float> -= float
+    __device__ coalesced_ref& operator-=(const T& update) {
+        if (warp_converged()) {
+            T data = detail::load_dispatch(m_ptr);
+            detail::store_dispatch(data - update, m_ptr);
+        } else {
+            T data = detail::divergent_load(m_ptr);
+            detail::divergent_store(data - update, m_ptr);
+        }
         return *this;
     }
 
@@ -54,6 +78,7 @@ struct coalesced_ref {
         }
         return *this;
     }
+
 };
 }
 

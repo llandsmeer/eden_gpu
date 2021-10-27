@@ -12,11 +12,18 @@ struct StateBuffers {
     // allocate at least two state vectors, to iterate in parallel
     RawTables::Table_F32 state_one;
     RawTables::Table_F32 state_two;
+    RawTables::Table_F32 state_print;
 
     std::vector<RawTables::Table_F32>  tables_state_f32_one;
     std::vector<RawTables::Table_F32>  tables_state_f32_two;
+    std::vector<RawTables::Table_F32>  tables_state_f32_print;
+
     std::vector<RawTables::Table_I64>  tables_state_i64_one;
     std::vector<RawTables::Table_I64>  tables_state_i64_two;
+
+    //print buffers
+
+    std::vector<RawTables::Table_F32>  state_print_f32_one;
 
     //also allocate pointer and size vectors, to use instead of silly std::vectors
     std::vector <long long> global_tables_const_f32_sizes;
@@ -27,6 +34,8 @@ struct StateBuffers {
     std::vector <long long> global_tables_state_f32_sizes;
     std::vector <Table_F32> global_tables_stateOne_f32_arrays;
     std::vector <Table_F32> global_tables_stateTwo_f32_arrays;
+    std::vector <Table_F32> global_tables_statePrint_f32_arrays;
+
     std::vector <long long> global_tables_state_i64_sizes;
     std::vector <Table_I64> global_tables_stateOne_i64_arrays;
     std::vector <Table_I64> global_tables_stateTwo_i64_arrays;
@@ -34,8 +43,10 @@ struct StateBuffers {
     StateBuffers(RawTables & tabs) :
                 state_one(tabs.global_initial_state),
                 state_two(tabs.global_initial_state.size(), NAN),
+                state_print(tabs.global_initial_state.size(), NAN),
                 tables_state_f32_one(tabs.global_tables_state_f32_arrays),
-                tables_state_i64_one(tabs.global_tables_state_i64_arrays)
+                tables_state_i64_one(tabs.global_tables_state_i64_arrays),
+                state_print_f32_one(tabs.global_tables_state_f32_arrays)
     {
         auto GetSizePtrTables = []( auto &tablist, auto &pointers, auto &sizes ){
             pointers.resize( tablist.size() );
@@ -48,11 +59,14 @@ struct StateBuffers {
 
         tables_state_f32_two.reserve( tables_state_f32_one.size());
         for( auto tab : tables_state_f32_one ) tables_state_f32_two.emplace_back( tab.size(), NAN );
+
+        tables_state_f32_print.reserve( tables_state_f32_one.size());
+        for( auto tab : tables_state_f32_one ) tables_state_f32_print.emplace_back( tab.size(), NAN );
+
         tables_state_i64_two.reserve( tables_state_i64_one.size() );
         for( auto tab : tables_state_i64_one ) tables_state_i64_two.emplace_back( tab.size(), 0 );
 
         // now things need to be done a little differently, since for example trigger(and lazy?) variables of Next ought to be zero for results to make sense
-
         GetSizePtrTables(tabs.global_tables_const_f32_arrays, global_tables_const_f32_arrays, global_tables_const_f32_sizes);
         GetSizePtrTables(tabs.global_tables_const_i64_arrays, global_tables_const_i64_arrays, global_tables_const_i64_sizes);
         //
@@ -60,31 +74,124 @@ struct StateBuffers {
         GetSizePtrTables(tables_state_i64_one, global_tables_stateOne_i64_arrays, global_tables_state_i64_sizes);
         GetSizePtrTables(tables_state_f32_two, global_tables_stateTwo_f32_arrays, global_tables_state_f32_sizes);
         GetSizePtrTables(tables_state_i64_two, global_tables_stateTwo_i64_arrays, global_tables_state_i64_sizes);
+        GetSizePtrTables(tables_state_f32_print, global_tables_statePrint_f32_arrays, global_tables_state_f32_sizes);
 
         // also, set up the references to the flat vectors
         global_tables_const_f32_arrays[tabs.global_const_tabref] = tabs.global_constants.data();
         global_tables_const_f32_sizes [tabs.global_const_tabref] = tabs.global_constants.size();
         //
-        global_tables_stateOne_f32_arrays[tabs.global_state_tabref] = state_one.data();
-        global_tables_stateTwo_f32_arrays[tabs.global_state_tabref] = state_two.data();
-        global_tables_state_f32_sizes    [tabs.global_state_tabref] = state_one.size();
+        global_tables_stateOne_f32_arrays  [tabs.global_state_tabref] = state_one.data();
+        global_tables_stateTwo_f32_arrays  [tabs.global_state_tabref] = state_two.data();
+        global_tables_statePrint_f32_arrays[tabs.global_state_tabref] = state_print.data();
+        global_tables_state_f32_sizes      [tabs.global_state_tabref] = state_one.size();
     }
 
-    void dump_array_locations(RawTables & tabs) {
+    void dump_array_locations(RawTables & tabs, bool content=true) {
         printf("ARRAY_LOC constants %p %lu %lu\n", tabs.global_constants.data(), tabs.global_constants.size()*sizeof(tabs.global_constants[0]), sizeof(tabs.global_constants[0]));
+        if (content) {
+            printf("ARRAY_CONTENT constants");
+            for (auto & x : tabs.global_constants) {
+                printf(" %f", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC const_f32_index %p %lu %lu\n", tabs.global_const_f32_index.data(), tabs.global_const_f32_index.size()*sizeof(tabs.global_const_f32_index[0]), sizeof(tabs.global_const_f32_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT const_f32_index");
+            for (auto & x : tabs.global_const_f32_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC table_const_f32_index %p %lu %lu\n", tabs.global_table_const_f32_index.data(), tabs.global_table_const_f32_index.size()*sizeof(tabs.global_table_const_f32_index[0]), sizeof(tabs.global_table_const_f32_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT table_const_f32_index");
+            for (auto & x : tabs.global_table_const_f32_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC table_const_i64_index %p %lu %lu\n", tabs.global_table_const_i64_index.data(), tabs.global_table_const_i64_index.size()*sizeof(tabs.global_table_const_i64_index[0]), sizeof(tabs.global_table_const_i64_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT table_const_i64_index");
+            for (auto & x : tabs.global_table_const_i64_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC table_state_f32_index %p %lu %lu\n", tabs.global_table_state_f32_index.data(), tabs.global_table_state_f32_index.size()*sizeof(tabs.global_table_state_f32_index[0]), sizeof(tabs.global_table_state_f32_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT table_state_f32_index");
+            for (auto & x : tabs.global_table_state_f32_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC table_state_i64_index %p %lu %lu\n", tabs.global_table_state_i64_index.data(), tabs.global_table_state_i64_index.size()*sizeof(tabs.global_table_state_i64_index[0]), sizeof(tabs.global_table_state_i64_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT table_state_i64_index");
+            for (auto & x : tabs.global_table_state_i64_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC state_f32_index %p %lu %lu\n", tabs.global_state_f32_index.data(), tabs.global_state_f32_index.size()*sizeof(tabs.global_state_f32_index[0]), sizeof(tabs.global_state_f32_index[0]));
+        if (content) {
+            printf("ARRAY_CONTENT state_f32_index");
+            for (auto & x : tabs.global_state_f32_index) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC state_now %p %lu %lu\n", state_one.data(), state_one.size()*sizeof(state_one[0]), sizeof(state_one[0]));
+        if (content) {
+            printf("ARRAY_CONTENT state_now");
+            for (auto & x : state_one) {
+                printf(" %f", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC state_next %p %lu %lu\n", state_two.data(), state_two.size()*sizeof(state_two[0]), sizeof(state_two[0]));
+        if (content) {
+            printf("ARRAY_CONTENT state_next");
+            for (auto & x : state_two) {
+                printf(" %f", x);
+            }
+            printf("\n");
+        }
 
         printf("ARRAY_LOC tables_const_f32_sizes %p %lu %lu\n", global_tables_const_f32_sizes.data(), global_tables_const_f32_sizes.size()*sizeof(global_tables_const_f32_sizes[0]), sizeof(global_tables_const_f32_sizes[0]));
+        if (content) {
+            printf("ARRAY_CONTENT tables_const_f32_sizes");
+            for (auto & x : global_tables_const_f32_sizes) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC tables_const_i64_sizes %p %lu %lu\n", global_tables_const_i64_sizes.data(), global_tables_const_i64_sizes.size()*sizeof(global_tables_const_i64_sizes[0]), sizeof(global_tables_const_i64_sizes[0]));
+        if (content) {
+            printf("ARRAY_CONTENT tables_const_i64_sizes");
+            for (auto & x : global_tables_const_i64_sizes) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC tables_state_f32_sizes %p %lu %lu\n", global_tables_state_f32_sizes.data(), global_tables_state_f32_sizes.size()*sizeof(global_tables_state_f32_sizes[0]), sizeof(global_tables_state_f32_sizes[0]));
+        if (content) {
+            printf("ARRAY_CONTENT tables_state_f32_sizes");
+            for (auto & x : global_tables_state_f32_sizes) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
         printf("ARRAY_LOC tables_state_i64_sizes %p %lu %lu\n", global_tables_state_i64_sizes.data(), global_tables_state_i64_sizes.size()*sizeof(global_tables_state_i64_sizes[0]), sizeof(global_tables_state_i64_sizes[0]));
+        if (content) {
+            printf("ARRAY_CONTENT tables_state_i64_sizes");
+            for (auto & x : global_tables_state_i64_sizes) {
+                printf(" %lld", x);
+            }
+            printf("\n");
+        }
 
         printf("ARRAY_LOC tables_stateNow_f32 %p %lu %lu\n", global_tables_stateOne_f32_arrays.data(), global_tables_stateOne_f32_arrays.size()*sizeof(global_tables_stateOne_f32_arrays[0]), sizeof(global_tables_stateOne_f32_arrays[0]));
         printf("ARRAY_LOC tables_stateNow_i64 %p %lu %lu\n", global_tables_stateOne_i64_arrays.data(), global_tables_stateOne_i64_arrays.size()*sizeof(global_tables_stateOne_i64_arrays[0]), sizeof(global_tables_stateOne_i64_arrays[0]));
@@ -97,36 +204,78 @@ struct StateBuffers {
             size_t size = global_tables_state_f32_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_stateOne_f32_arrays[%lu] %p %lu %lu\n", i, global_tables_stateOne_f32_arrays[i], size*sizeof(float), sizeof(float));
+            if (content) {
+                printf("ARRAY_CONTENT table_stateOne_f32_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %f", global_tables_stateOne_f32_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         for (size_t i = 0; i < global_tables_stateTwo_f32_arrays.size(); i++) {
             size_t size = global_tables_state_f32_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_stateTwo_f32_arrays[%lu] %p %lu %lu\n", i, global_tables_stateTwo_f32_arrays[i], size*sizeof(float), sizeof(float));
+            if (content) {
+                printf("ARRAY_CONTENT table_stateTwo_f32_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %f", global_tables_stateTwo_f32_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         for (size_t i = 0; i < global_tables_const_f32_arrays.size(); i++) {
             size_t size = global_tables_const_f32_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_arrays[%lu] %p %lu %lu\n", i, global_tables_const_f32_arrays[i], size*sizeof(float), sizeof(float));
+            if (content) {
+                printf("ARRAY_CONTENT table_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %f", global_tables_const_f32_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         for (size_t i = 0; i < global_tables_stateOne_i64_arrays.size(); i++) {
             size_t size = global_tables_state_i64_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_arrays[%lu] %p %lu %lu\n", i, global_tables_stateOne_i64_arrays[i], size*sizeof(long long), sizeof(long long));
+            if (content) {
+                printf("ARRAY_CONTENT table_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %lld", global_tables_stateOne_i64_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         for (size_t i = 0; i < global_tables_stateTwo_i64_arrays.size(); i++) {
             size_t size = global_tables_state_i64_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_stateTwo_i64_arrays[%lu] %p %lu %lu\n", i, global_tables_stateTwo_i64_arrays[i], size*sizeof(long long), sizeof(long long));
+            if (content) {
+                printf("ARRAY_CONTENT table_stateTwo_i64_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %lld", global_tables_stateTwo_i64_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         for (size_t i = 0; i < global_tables_const_i64_arrays.size(); i++) {
             size_t size = global_tables_const_i64_sizes[i];
             if (size == 0) continue;
             printf("ARRAY_LOC table_const_i64_arrays[%lu] %p %lu %lu\n", i, global_tables_const_i64_arrays[i], size*sizeof(long long), sizeof(long long));
+            if (content) {
+                printf("ARRAY_CONTENT table_const_i64_arrays[%lu]", i);
+                for (size_t j = 0; j < size; j++) {
+                    printf(" %lld", global_tables_const_i64_arrays[i][j]);
+                }
+                printf("\n");
+            }
         }
 
         fflush(stdout);

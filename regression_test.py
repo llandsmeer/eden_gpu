@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 PLOT_ON_FAILURE = False
-TEST_MPI = False
+TEST_MPI = True
 
 class bcolors:
     HEADER = '\033[95m'
@@ -14,7 +14,6 @@ class bcolors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-
 
 def system(cmd, gpu=False, submit=True):
     if os.path.exists('/opt/ibm/spectrum_mpi/jsm_pmix/bin/jsrun') and submit:
@@ -85,15 +84,19 @@ if TEST_MPI:
 else:
     system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake -DUSE_MPI=OFF ..; make -j 4"')
 
-verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
 verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
-verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
 verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
 
 if TEST_MPI:
     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=4)
+
 
 print('(-- logs repeated here --)')
 for msg in final:

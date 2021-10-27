@@ -1,0 +1,26 @@
+#!/bin/sh
+
+rm -r cmake-build/
+mkdir cmake-build
+cd cmake-build
+
+CXX=g++ \
+CC=gcc \
+cmake \
+-DCMAKE_BUILD_TYPE=Debug \
+-DCMAKE_CXX_FLAGS="-g -O0" \
+-DCMAKE_EXE_LINKER_FLAGS="-g -O0" \
+-DCMAKE_CXX_STANDARD_REQUIRED=ON \
+-DCMAKE_CXX_EXTENSIONS=OFF \
+-DCMAKE_CUDA_STANDARD=14 \
+-DCMAKE_CUDA_STANDARD_REQUIRED=ON \
+-DCMAKE_CUDA_EXTENSIONS=OFF \
+-DCMAKE_CUDA_ARCHITECTURES="70" \
+-DCMAKE_CUDA_FLAGS="-std=c++14" \
+..
+
+#-DCMAKE_CUDA_FLAGS="-Xcompiler -mno-float128" \
+
+make -j8
+
+cd ..
