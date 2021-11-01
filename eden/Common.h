@@ -1,9 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-//We should clean this file further
-
-//standart includes
+//standard includes
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +22,17 @@
 #include <string>
 #include <stdarg.h> //for advanced whining
 #include <unistd.h> //for time & memory usage measurement
+
+// The logger
+#include "../thirdparty/miniLogger/miniLogger.h"
+
+//passable this way as function argument
+struct LogContext{
+    uint mpi_rank = 0;
+    std::ofstream log_file;
+};
+#define LOG_DEFAULT LOG_DEBUG
+#define INIT_LOG(FiLe,PiD) miniLogger log(LOG_DEFAULT,std::cout,FiLe, __FUNCTION__,PiD)
 
 
 #if defined (__linux__) || defined(__APPLE__)
@@ -89,7 +98,6 @@ typedef long long * Table_I64;
 
 // May be missing if not suported by platform, though
 double TimevalDeltaSec(const timeval &start, const timeval &end);
-
 struct Timer {
     timeval start;
     Timer() {
@@ -102,7 +110,6 @@ struct Timer {
     }
 };
 
-
 // Memory measurements on Linux
 // TODO support on more platforms !
 #ifdef 	__linux__
@@ -112,7 +119,7 @@ int64_t getPeakResidentSetBytes();
 int64_t getCurrentHeapBytes();
 #endif
 
-
+// Struct to save meta data into
 struct RunMetaData{
 	double config_time_sec;
 	double init_time_sec;
@@ -132,7 +139,6 @@ struct RunMetaData{
 	}
 
 	void print() {
-
         printf("Config: %.3lf Setup: %.3lf Run: %.3lf \n", config_time_sec, init_time_sec, run_time_sec);
 #ifdef __linux__
         //get memory usage information too
@@ -167,13 +173,12 @@ public:
 
 // Tokenize a string, as with String.split() in string-capable languages
 std::vector<std::string> string_split(const std::string& str, const std::string& delim);
-
-bool GetLineColumnFromFile(const char *filename, const ptrdiff_t file_byte_offset, long long &line, long long &column);
+bool GetLineColumnFromFile(const char *filename, ptrdiff_t file_byte_offset, long long &line, long long &column);
 
 //A more structured way to complain 
 //Accepts varargs just because string manipulation is clunky in C/C++, even clunkier than varargs
-void ReportErrorInFile_Base(FILE *error_log, const char *filename, const ptrdiff_t file_byte_offset, const char *format, va_list args);
-void ReportErrorInFile(FILE *error_log, const char *filename, const ptrdiff_t file_byte_offset, const char *format, ...);
+void ReportErrorInFile_Base(FILE *error_log, const char *filename, ptrdiff_t file_byte_offset, const char *format, va_list args);
+void ReportErrorInFile(FILE *error_log, const char *filename, ptrdiff_t file_byte_offset, const char *format, ...);
 
 //------------------> Utilities end
 

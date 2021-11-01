@@ -1,28 +1,31 @@
-#include "parse_command_line_args.h"
-#include "../thirdparty/miniLogger/miniLogger.h"
+/*
+ * Created
+ */
 
-void print_eden_cli_header() {
-    INIT_LOG();
-    log(LOG_OVERWRITE) << "       ###########    ###############              ###########    ######     #########       "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "     ###############   ##################        ###############    #####  ##############    "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "   #####          ####      #####    ######    #####          ####     ######       ######   "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "  ####                    ####          ####  ####                     ####           #####  "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "  ###############         ###            ###  ###############          ####            ####  "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "  ############           ####            ###  ############             ###             ####  "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "  ####                   ####            ###  ####                     ###             ####  "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "  ####              #    ####           ####  ####              #     ####             ####  "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "   #####          ###     ####         ####    #####          ###     ####            ####   "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "    ################        ##############      ################     ####            ####    "<< LOG_ENDL;
-    log(LOG_OVERWRITE) << "      ##########              ##########          ##########        ####            #####    "<< LOG_ENDL << LOG_ENDL;
-    log(LOG_OVERWRITE) << "--- Extensible Dynamics Engine for Networks ---" << LOG_ENDL << LOG_ENDL;
+#include "parse_command_line_args.h"
+#include "Common.h"
+
+void print_eden_cli_header(LogContext& logC) {
+    INIT_LOG(&logC.log_file,logC.mpi_rank);
+    log(LOG_OVERWRITE,0) << "       ###########    ###############              ###########    ######     #########       "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "     ###############   ##################        ###############    #####  ##############    "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "   #####          ####      #####    ######    #####          ####     ######       ######   "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "  ####                    ####          ####  ####                     ####           #####  "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "  ###############         ###            ###  ###############          ####            ####  "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "  ############           ####            ###  ############             ###             ####  "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "  ####                   ####            ###  ####                     ###             ####  "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "  ####              #    ####           ####  ####              #     ####             ####  "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "   #####          ###     ####         ####    #####          ###     ####            ####   "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "    ################        ##############      ################     ####            ####    "<< LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "      ##########              ##########          ##########        ####            #####    "<< LOG_ENDL << LOG_ENDL;
+    log(LOG_OVERWRITE,0) << "--- Extensible Dynamics Engine for Networks ---" << LOG_ENDL << LOG_ENDL;
 #ifndef BUILD_STAMP
 #define BUILD_STAMP __DATE__
 #endif
     log(LOG_INFO) << "Build version " <<  BUILD_STAMP  << LOG_ENDL;
 }
-
 void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_config, SimulatorConfig & config, Model & model, double & config_time_sec) {
-	INIT_LOG();
+    INIT_LOG(&engine_config.log_context.log_file,engine_config.log_context.mpi_rank);
     timeval config_start, config_end;
 	gettimeofday(&config_start, NULL);
 	bool model_selected = false;
@@ -40,7 +43,7 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 			
 			timeval nml_start, nml_end;
 			gettimeofday(&nml_start, NULL);
-			if(!( ReadNeuroML(argv[i+1], model, true) )){
+			if(!( ReadNeuroML(argv[i+1], model, true, engine_config.log_context) )){
                 log(LOG_ERR) << "cmdline: could not make sense of NeuroML file" << LOG_ENDL;
 				exit(1);
 			}
@@ -183,6 +186,7 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		log(LOG_WARN) << "Can not use TROVE in CPU mode" << LOG_ENDL;
         engine_config.trove = false;
     }
+
 	gettimeofday(&config_end, NULL);
 	config_time_sec = TimevalDeltaSec(config_start, config_end);
 }

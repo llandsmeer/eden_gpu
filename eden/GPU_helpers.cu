@@ -2,8 +2,7 @@
 // Created by max on 04-10-21.
 //
 
-#include <cstdio>
-#include "../thirdparty/miniLogger/miniLogger.h"
+#include "GPU_helpers.h"
 
 #define CUDA_CHECK_RETURN(value) {										\
 	cudaError_t _m_cudaStat = value;									\
@@ -16,15 +15,12 @@
 		exit(1);														\
 	} }
 
-
-bool GPU_checker(){
-    INIT_LOG();
-
+bool test_GPU(LogContext &logC){
+    INIT_LOG(&logC.log_file,logC.mpi_rank);
     int Amount_of_GPUS_detected = 0;
     CUDA_CHECK_RETURN(cudaGetDeviceCount(&Amount_of_GPUS_detected));
     log(LOG_INFO) << "amount of gpus detected: " << Amount_of_GPUS_detected << LOG_ENDL;
-    //todo
-    cudaDeviceProp prop;
+    cudaDeviceProp prop{};
     CUDA_CHECK_RETURN(cudaGetDeviceProperties(&prop, 0));
     log(LOG_INFO) << "      PCI device id:                " << prop.pciBusID << LOG_ENDL;
     log(LOG_INFO) << "      Device name:                  " << prop.name << LOG_ENDL;
@@ -35,9 +31,5 @@ bool GPU_checker(){
     log(LOG_INFO) << "      Total global memory (Gbytes): " << (prop.totalGlobalMem / 1000000000) << LOG_ENDL;
     log(LOG_INFO) << "      Compute cabability :          " << prop.major << "." << prop.minor << LOG_ENDL;
     log(LOG_INFO) << "      Number of multiprocessors :   " << prop.multiProcessorCount << LOG_ENDL;
-    return true;
-}
-
-void test(){
-    GPU_checker();
+    return Amount_of_GPUS_detected;
 }

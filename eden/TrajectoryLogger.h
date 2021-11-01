@@ -63,12 +63,12 @@ struct TrajectoryLogger {
         open_trajectory_files(engine_config);
     }
 
-    void write_output_logs(EngineConfig & engine_config, double time, float * global_state_now, /* for MPI??: */Table_F32 * global_tables_stateNow_f32) {
-        for(size_t i = 0; i < engine_config.trajectory_loggers.size(); i++){
-            if (engine_config.use_mpi) {
-                assert(engine_config.my_mpi.rank == 0);
+    bool write_output_logs(EngineConfig * engine_config, double time, const float * global_state_now, Table_F32 * global_tables_stateNow_f32) {  //last table for MPI
+        for(size_t i = 0; i < engine_config->trajectory_loggers.size(); i++){
+            if (engine_config->use_mpi) {
+                assert(engine_config->my_mpi.rank == 0);
             }
-            const auto &logger = engine_config.trajectory_loggers[i];
+            const auto &logger = engine_config->trajectory_loggers[i];
             FILE *& fout = trajectory_open_files[i];
 
             const ScaleEntry seconds = {"sec",  0, 1.0};
@@ -88,9 +88,9 @@ struct TrajectoryLogger {
                     case EngineConfig::TrajectoryLogger::LogColumn::Type::TOPLEVEL_STATE :{
                         if(column.value_type == EngineConfig::TrajectoryLogger::LogColumn::ValueType::F32){
 #ifdef USE_MPI
-                            if (engine_config.use_mpi) {
-                                if( column.on_node >= 0 && column.on_node != engine_config.my_mpi.rank ){
-                                    size_t table = engine_config.recvlist_impls.at(column.on_node).value_mirror_buffer;
+                            if (engine_config->use_mpi) {
+                                if( column.on_node >= 0 && column.on_node != engine_config->my_mpi.rank ){
+                                    size_t table = engine_config->recvlist_impls.at(column.on_node).value_mirror_buffer;
 
                                     // scaling is done on remote node
                                     return global_tables_stateNow_f32[table][column.entry];
@@ -125,6 +125,7 @@ struct TrajectoryLogger {
             }
             fprintf(fout, "\n");
         }
+        return true;
     }
 
     void close () {

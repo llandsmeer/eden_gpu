@@ -7031,7 +7031,10 @@ struct ImportState{
 };
 
 //Top-level NeuroML import routine
-bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simulation, FILE *info_log, FILE *error_log){
+bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simulation, LogContext& logC, FILE *info_log, FILE *error_log){
+
+    miniLogger logN(LOG_DEFAULT,std::cout,&logC.log_file, __FUNCTION__,logC.mpi_rank);
+    logN(LOG_WARN) << "SOME PrINt To CLEAN STILL FROM HERE ON >>>> " << LOG_ENDL;
 
 	bool ok = false;
 	fprintf(info_log, "Starting import from NeuroML file %s\n", top_level_filename);
@@ -7624,6 +7627,8 @@ bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simul
 
 	CLEANUP:
 	//all handled automatically, actually
-	
+
+    logN(LOG_WARN) << " <<<<< TIL HERE " << LOG_ENDL;
+
 	return ok;
 }

@@ -6,6 +6,18 @@
 #include "AbstractBackend.h"
 
 #ifdef USE_MPI
+
+#define MPI_CHECK_RETURN(error_code) {                                           \
+    if (error_code != MPI_SUCCESS) {                                             \
+        char error_string[BUFSIZ];                                               \
+        int length_of_error_string;                                              \
+        int world_rank;                                                          \
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);                              \
+        MPI_Error_string(error_code, error_string, &length_of_error_string);     \
+        fprintf(stderr, "%3d: %s\n", world_rank, error_string);                  \
+        exit(1);                                                                 \
+    }}
+
 #include "TypePun.h"
 #include <mpi.h>
 
@@ -15,40 +27,32 @@ static void Say(const char *format, ... ){
     va_list args;
     va_start(args, format);
     int dit;
-    MPI_Comm_rank(MPI_COMM_WORLD, &dit);
+    MPI_CHECK_RETURN(MPI_Comm_rank(MPI_COMM_WORLD, &dit));
     std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
     vfprintf(fLog, new_format.c_str(), args);
     fflush(stdout);
     va_end (args);
 }
+
 #endif
 
 static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
-    if (!Engine->use_mpi) return;
 #ifdef USE_MPI
     // first of first of all, replace argc and argv
     // Modern implementations may keep MPI args from appearing anyway; non-modern ones still need this
-    MPI_Init(&argc, &argv);
+    MPI_CHECK_RETURN(MPI_Init(&argc, &argv));
     // Get the number of processes
-    MPI_Comm_size(MPI_COMM_WORLD, &Engine->my_mpi.world_size);
+    MPI_CHECK_RETURN(MPI_Comm_size(MPI_COMM_WORLD, &Engine->my_mpi.world_size));
     // Get the rank of the process
-    MPI_Comm_rank(MPI_COMM_WORLD, &Engine->my_mpi.rank);
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    MPI_CHECK_RETURN(MPI_Comm_rank(MPI_COMM_WORLD, &Engine->my_mpi.rank));
+
+    // Get processor name
     int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
-
-    if(1){
-        printf("Hello from processor %s, rank %d out of %d processors\n", processor_name, Engine->my_mpi.rank, Engine->my_mpi.world_size);
-
-        if( Engine->my_mpi.rank != 0 ){
-            char tmps[555];
-            sprintf(tmps, "log_node_%d.gen.txt", Engine->my_mpi.rank);
-            freopen(tmps,"w",stdout);
-            stderr = stdout;
-        }
-    }
+    MPI_CHECK_RETURN(MPI_Get_processor_name(Engine->my_mpi.processor_name, &name_len));
+    INIT_LOG(nullptr,Engine->my_mpi.rank);
 #endif
 }
+
 
 #ifdef USE_MPI
 struct MpiBuffers {
@@ -161,13 +165,13 @@ public:
             if( config.debug_netcode ){
                 Say("Send %d : %s", other_rank, NetMessage_ToString( buf_value_len, buf).c_str());
             }
-            MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req );
+            MPI_CHECK_RETURN(MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req ));
         }
 
 
         // Recv info needed by this node
         auto PostRecv = [&config]( int other_rank, std::vector<float> &buf, MPI_Request &recv_req ){
-            MPI_Irecv( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &recv_req );
+            MPI_CHECK_RETURN(MPI_Irecv( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &recv_req ));
         };
         auto ReceiveList = [ &engine_config, &global_tables_stateNow_f32, &global_tables_stateNow_i64 ]( const EngineConfig::RecvList_Impl &recvlist_impl, std::vector<float> &buf ){
 
@@ -216,7 +220,7 @@ public:
                     // check if recv is done
                     int flag = 0;
                     MPI_Status status;
-                    MPI_Test( &req, &flag, &status);
+                    MPI_CHECK_RETURN(MPI_Test( &req, &flag, &status));
                     if( flag ){
                         // received, yay !
                         // Say("Recv %d.%zd", other_rank,  recvlist_impl.value_mirror_size);
@@ -231,10 +235,10 @@ public:
                     // check if probe is ready
                     int flag = 0;
                     MPI_Status status;
-                    MPI_Iprobe( other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &flag, &status);
+                    MPI_CHECK_RETURN(MPI_Iprobe( other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &flag, &status));
                     if( flag ){
                         int buf_size;
-                        MPI_Get_count( &status, MPI_FLOAT, &buf_size );
+                        MPI_CHECK_RETURN(MPI_Get_count( &status, MPI_FLOAT, &buf_size ));
                         buf.resize( buf_size );
                         PostRecv( other_rank, buf, req );
                         received_probes[idx] = true;
@@ -242,8 +246,6 @@ public:
                 }
 
             }
-            // MPI_Finalize();
-            // 	exit(1);
         } while( !all_received );
         // and clear the progress flags
         received_probes.assign( received_probes.size(), false );
@@ -253,13 +255,13 @@ public:
     void finish_communicate(EngineConfig & engine_config) {
         if (!engine_config.use_mpi) return;
         // wait for sends, to finish the iteration
-        MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE );
+        MPI_CHECK_RETURN(MPI_Waitall( send_requests.size(), send_requests.data(), MPI_STATUSES_IGNORE ));
     }
 
     ~MpiBuffers () {
         // this is necessary, so stdio files are actually flushed
         if (actually_using_mpi) {
-            MPI_Finalize();
+            MPI_CHECK_RETURN(MPI_Finalize());
         }
     }
 };

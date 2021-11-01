@@ -18,7 +18,6 @@
 #endif
 
 bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConfig &engine_config, RawTables &tabs) {
-
     /*
     TODO:
         decouple derivative from integration rule
@@ -99,6 +98,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         Attached mechanisms (due to synapses and input sources)
     */
 
+    INIT_LOG(&engine_config.log_context.log_file,engine_config.log_context.mpi_rank);
+
     const auto &dimensions          = model.dimensions          ;
     const auto &component_types     = model.component_types     ;
     const auto &morphologies        = model.morphologies        ;
@@ -114,7 +115,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     const auto &target_simulation   = model.target_simulation   ;
 
     const Simulation &sim = simulations.get(target_simulation);
-
 
     // the basic RNG seed.
     // Modify using mose sim properties, LATER
