@@ -1,3 +1,6 @@
+0.2
+- Refactored codebase
+- Added GPU backend
 
 0.1
 - Add support for Microsoft Windows and Apple macOS

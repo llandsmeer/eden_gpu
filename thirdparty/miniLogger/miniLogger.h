@@ -1,5 +1,5 @@
 //
-// Created by max on 26-01-21.
+// Created by max
 // c++ lib Header only
 //
 
