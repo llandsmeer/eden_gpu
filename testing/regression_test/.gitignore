@@ -1,0 +1,7 @@
+*.gen.c
+*.gen.cu
+*.gen.so
+*.gen.gpu.so
+build/
+log*
+temp*
