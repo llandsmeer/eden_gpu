@@ -199,7 +199,7 @@ int main(int argc, char **argv){
 
             //some progress output
             if(step > 0 && !(step % (total_steps/10)))
-                log(LOG_INFO) << "Progress: " <<  (float)step/(float)total_steps*100 << " %" << LOG_ENDL;
+                log(LOG_MES) << "Progress: " <<  (float)step/(float)total_steps*100 << " %" << LOG_ENDL;
         }
 
         //----> fix the last printing to the outputfile one can just select the global_state_now for this.

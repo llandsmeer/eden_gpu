@@ -89,28 +89,28 @@ if TEST_MPI:
 else:
     system(f'sh -c "rm -f results1.txt; mkdir -p build; cd build; cmake -DUSE_MPI=OFF ..; make -j 4"')
 
-# if TEST_CPU:
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
-    # verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
+if TEST_CPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False)
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=False)
 
-# if TEST_GPU:
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
-#     verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels')
-#     verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels')
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
-#     verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='threads_per_block 1')
-#     verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='threads_per_block 1')
-#
-# if TEST_MPI and TEST_CPU:
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
-#     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
+if TEST_GPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True)
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels')
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='single_kernels threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml',           'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, extra_flags='threads_per_block 1')
+    verify('examples/LEMS_NML2_Ex25_MultiCelltypes_TEST.xml', 'results2.txt', 'LEMS_NML2_Ex25_MultiCelltypes_TEST.txt', gpu=True, extra_flags='threads_per_block 1')
+
+if TEST_MPI and TEST_CPU:
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=False, nmpi=4)
 
 if TEST_MPI and TEST_GPU:
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=1)
-    # verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=2)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=1)
+    verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=2)
     verify('examples/LEMS_NML2_Ex25_MultiComp.xml', 'results1.txt', 'LEMS_NML2_Ex25_MultiComp.txt', gpu=True, nmpi=4)
 
 

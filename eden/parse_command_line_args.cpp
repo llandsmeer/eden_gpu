@@ -22,7 +22,7 @@ void print_eden_cli_header(LogContext& logC) {
 #ifndef BUILD_STAMP
 #define BUILD_STAMP __DATE__
 #endif
-    log(LOG_INFO) << "Build version " <<  BUILD_STAMP  << LOG_ENDL;
+    log(LOG_DEBUG) << "Build version " <<  BUILD_STAMP  << LOG_ENDL;
 }
 void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_config, SimulatorConfig & config, Model & model, double & config_time_sec) {
     INIT_LOG(&engine_config.log_context.log_file,engine_config.log_context.mpi_rank);
