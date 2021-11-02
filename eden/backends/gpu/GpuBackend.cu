@@ -236,19 +236,13 @@ void GpuBackend::execute_work_gpu(EngineConfig &engine_config, SimulatorConfig &
 
         //find size of shared memory for this kernel launch:
         long long int size_of_shared_memory = 0;
-
         if((cic.n_items + cic.start_item) == tabs.global_const_f32_index.size()){
             size_of_shared_memory = (long long int)tabs.global_constants.size() - tabs.global_const_f32_index[cic.start_item];
         }else{
             size_of_shared_memory = tabs.global_const_f32_index[cic.start_item+cic.n_items] - tabs.global_const_f32_index[cic.start_item];
         }
         const long long int N_blocks =  (long long int)(cic.n_items+threads_per_block-1)/threads_per_block;
-
         size_of_shared_memory = (size_of_shared_memory + N_blocks - 1)/N_blocks;
-
-        if(config.debug) {
-            printf("Before launching the kernel %d size_of_shared_memory %lld\n", idx, size_of_shared_memory);
-        }
 
         ((GPUIterationCallback)cic.callback) (
                           cic.start_item,

@@ -69,7 +69,7 @@ endif(CUDA_FOUND)
 
 # <---
 # ---> MPI resources to build with MPI communication if applicable.
-if(USE_MPI)
+#if(USE_MPI)
     find_package(MPI)
     if(MPI_FOUND)
         message("STATUS [Eden] MPI enabled")
@@ -115,7 +115,7 @@ if(USE_MPI)
     else ()
         message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
     endif(MPI_FOUND)
-endif()
+#endif()
 # <---
 
 if(MPI_FOUND)

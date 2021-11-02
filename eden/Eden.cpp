@@ -20,10 +20,9 @@ Parallel simulation engine for ODE-based models
 /* todo:
  *      gebruik std::async ipv thread ! :D  research if it's better
  *      input flag's nakijken
- *
  *  */
 
-//
+// STD libs
 #include <thread>
 
 // Local includes
@@ -39,7 +38,6 @@ Parallel simulation engine for ODE-based models
 #include "Mpi_helpers.h"
 #include "TrajectoryLogger.h"
 #include "parse_command_line_args.h"
-
 
 int main(int argc, char **argv){
 //-----> declaration of all used variables
@@ -127,24 +125,21 @@ int main(int argc, char **argv){
 
 //----> Simulations loop
     std::thread Write_Output_Thread;
-
     log(LOG_MES) << "Starting simulation loop..."<< LOG_ENDL;
     {
-
         Timer run_timer;
         size_t total_steps = ceil((engine_config.t_final -engine_config.t_initial)/engine_config.dt);
         double time = engine_config.t_initial;
 
         // need multiple initialization steps, to make sure the dependency chains of all state variables are resolved
         for (long long step = -3; time <= engine_config.t_final; step++) {
-
             // Start and check the output logger
             if(step > 1){
                 if (Write_Output_Thread.joinable()) Write_Output_Thread.join();
                 backend->populate_print_buffer();
                 auto sn_f32 = engine_config.use_mpi ? backend->print_tables_stateNow_f32() : nullptr;
-//             threading
 
+                //-----> Threading
                 Write_Output_Thread = std::thread(
                         &TrajectoryLogger::write_output_logs,
                         trajectory_logger,
@@ -152,28 +147,6 @@ int main(int argc, char **argv){
                         time - engine_config.dt,
                         backend->print_state_now(),
                         sn_f32 );
-
-//                Write_Output_Thread = std::thread(
-//                        &OutputMonitor::PrintTimestep,
-//                        sim.output_monitor,
-//                        NetworkState_l[0].hostVs_print,
-//                        NetworkState_l[0].hostYs_print,
-//                        NetworkState_l[0].hostCalc_print,
-//                        NetworkState_l[0].hostCurrents_print,
-//                        sim.timestep,
-//                        step,
-//                        nCE,
-//                        nCO,
-//                        nCh,
-//                        nGA,
-//                        (int) (sim.time / sim.timestep),
-//                        &runMetaData.OutputWriteTime_ms);
-
-
-//              no treading:
-//                trajectory_logger->write_output_logs(engine_config, time - engine_config.dt,
-//                                 backend->print_state_now(),
-//                                 sn_f32);
             }
 
             //init mpi communication --> empty call if no mpi compilation

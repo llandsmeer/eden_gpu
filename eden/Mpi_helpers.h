@@ -21,18 +21,6 @@
 #include "TypePun.h"
 #include <mpi.h>
 
-// MPI context, just a few globals like world size, rank etc.
-static void Say(const char *format, ... ){
-    FILE *fLog = stdout;
-    va_list args;
-    va_start(args, format);
-    int dit;
-    MPI_CHECK_RETURN(MPI_Comm_rank(MPI_COMM_WORLD, &dit));
-    std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
-    vfprintf(fLog, new_format.c_str(), args);
-    fflush(stdout);
-    va_end (args);
-}
 
 #endif
 
@@ -58,6 +46,8 @@ static void setup_mpi(int & argc, char ** & argv, EngineConfig* Engine) {
 struct MpiBuffers {
 private:
     bool actually_using_mpi = false;
+    miniLogger *logP;
+
 public:
     typedef std::vector<float> SendRecvBuf;
     std::vector<int> send_off_to_node;
@@ -78,8 +68,15 @@ public:
         received_sends( engine_config.recvlist_impls.size(), false)
     {
         if (!engine_config.use_mpi) return;
+        logP = new miniLogger(LOG_DEFAULT,
+                             std::cout,
+                             &engine_config.log_context.log_file,
+                             __FUNCTION__,
+                             engine_config.log_context.mpi_rank);
+        (*logP)(LOG_INFO) << "Allocating MPI buffers..." << LOG_ENDL;
+
         actually_using_mpi = true;
-        printf("Allocating comm buffers...\n");
+
         for( const auto &keyval : engine_config.sendlist_impls ){
             send_off_to_node.push_back( keyval.first );
             send_bufs.emplace_back();
@@ -163,7 +160,7 @@ public:
                 }
             }
             if( config.debug_netcode ){
-                Say("Send %d : %s", other_rank, NetMessage_ToString( buf_value_len, buf).c_str());
+                (*logP)(LOG_DEBUG) << NetMessage_ToString( buf_value_len, buf).c_str() << LOG_ENDL;
             }
             MPI_CHECK_RETURN(MPI_Isend( buf.data(), buf.size(), MPI_FLOAT, other_rank, MYMPI_TAG_BUF_SEND, MPI_COMM_WORLD, &req ));
         }
@@ -223,9 +220,8 @@ public:
                     MPI_CHECK_RETURN(MPI_Test( &req, &flag, &status));
                     if( flag ){
                         // received, yay !
-                        // Say("Recv %d.%zd", other_rank,  recvlist_impl.value_mirror_size);
                         if( config.debug_netcode ){
-                            Say("Recv %d : %s", other_rank, NetMessage_ToString( recvlist_impl.value_mirror_size, buf).c_str());
+                            (*logP)(LOG_DEBUG) << NetMessage_ToString( recvlist_impl.value_mirror_size, buf).c_str() << LOG_ENDL;
                         }
                         ReceiveList( recvlist_impl, buf );
                         received_sends[idx] = true;

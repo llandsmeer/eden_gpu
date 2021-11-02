@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include <float.h>
 #include <stddef.h>
-#include <inttypes.h>
+#include <cinttypes>
 
 //for model representation and more
 #include <climits>  //for INT_MAX
@@ -23,9 +23,9 @@
 #include <functional>
 #include <algorithm>
 #include <utility>
-#include <string.h>
+#include <cstring>
 #include <string>
-#include <stdarg.h> //for advanced whining
+#include <cstdarg> //for advanced whining
 #include <unistd.h> //for time & memory usage measurement
 
 // The logger

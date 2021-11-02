@@ -13,7 +13,30 @@
 #include "TypePun.h"
 
 #ifdef USE_MPI
-    #include "Mpi_helpers.h"
+#include <mpi.h>
+//todo fix this better...
+#define MPI_CHECK_RETURN(error_code) {                                           \
+    if (error_code != MPI_SUCCESS) {                                             \
+        char error_string[BUFSIZ];                                               \
+        int length_of_error_string;                                              \
+        int world_rank;                                                          \
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);                              \
+        MPI_Error_string(error_code, error_string, &length_of_error_string);     \
+        fprintf(stderr, "%3d: %s\n", world_rank, error_string);                  \
+        exit(1);                                                                 \
+    }}
+
+static void Say(const char *format, ... ){
+    FILE *fLog = stdout;
+    va_list args;
+    va_start(args, format);
+    int dit;
+    MPI_CHECK_RETURN(MPI_Comm_rank(MPI_COMM_WORLD, &dit));
+    std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
+    vfprintf(fLog, new_format.c_str(), args);
+    fflush(stdout);
+    va_end (args);
+}
 #endif
 
 template <typename Real>

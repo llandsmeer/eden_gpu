@@ -127,35 +127,35 @@ void parse_command_line_args(int argc, char ** argv, EngineConfig & engine_confi
 		else if(arg == "gcc"){
 			config.use_icc = false;
 		}
-        else if(arg == "single-kernels") {
+		else if(arg == "single-kernels") {
             config.skip_combining_consecutive_kernels = true;
         }
-        else if(arg == "syscall-guard") {
+		else if(arg == "syscall-guard") {
             config.syscall_guard_callback = true;
         }
-        else if(arg == "dump_array_locations") {
+		else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }
 #ifdef USE_GPU
-        else if(arg == "gpu") {
+		else if(arg == "gpu") {
             engine_config.backend = backend_kind_gpu;
         }
-        else if(arg == "trove") {
+		else if(arg == "trove") {
             engine_config.trove = true;
         }
-        else if(arg == "debug_gpu_kernels") {
+		else if(arg == "debug_gpu_kernels") {
             config.debug_gpu_kernels = true;
         }
 #endif
 #ifdef USE_MPI
-        else if(arg == "mpi") {
+		else if(arg == "mpi") {
             engine_config.use_mpi = true;
         }
 #endif
-        else if(arg == "dump_array_locations") {
+		else if(arg == "dump_array_locations") {
             config.dump_array_locations = true;
         }
-        else if(arg == "threads_per_block") {
+		else if(arg == "threads_per_block") {
             if(i == argc - 1){
                 log(LOG_ERR) << "cmdline: "<<  arg.c_str() << "value missing" << LOG_ENDL;
                 exit(1);
