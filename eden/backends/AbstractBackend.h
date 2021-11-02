@@ -3,10 +3,10 @@
 #define BACKENDS_H
 
 //dependencies
-#include "NeuroML.h"    //needed for implementations
-#include "StateBuffers.h"
-#include "SimulatorConfig.h"
-#include "EngineConfig.h"
+#include "../NeuroML.h"             //needed for implementations
+#include "../StateBuffers.h"
+#include "../SimulatorConfig.h"
+#include "../EngineConfig.h"
 
 class AbstractBackend {
 public:

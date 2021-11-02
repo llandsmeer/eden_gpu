@@ -33,10 +33,7 @@
 #define EDEN_CPU_CPUBACKEND_H
 
 #include <cstring>
-#include "../../AbstractBackend.h"
-
-#define DEBUGMEM
-
+#include "eden/backends/AbstractBackend.h"
 
 class CpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;
@@ -65,17 +62,6 @@ public:
         m_global_tables_stateNext_i64    = state->global_tables_stateTwo_i64_arrays.data();
 
         m_global_constants               = tabs.global_constants.data();
-
-#ifdef DEBUGMEM
-        printf("m_global_constants (%zu): ", state->state_one.size());
-        for(size_t i = 0; i<state->state_one.size(); i++) {
-            printf(" %9.6f\t", m_global_constants[i]);
-            if(!((i+1)%10))
-                printf("\n                          ");
-        }
-        printf("\n");
-#endif
-
         m_global_const_f32_index         = tabs.global_const_f32_index.data();
         m_global_table_const_f32_index   = tabs.global_table_const_f32_index.data();
         m_global_table_const_i64_index   = tabs.global_table_const_i64_index.data();

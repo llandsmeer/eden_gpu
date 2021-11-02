@@ -3,7 +3,7 @@
 
 #include "EngineConfig.h"
 #include "StateBuffers.h"
-#include "AbstractBackend.h"
+#include "eden/backends/AbstractBackend.h"
 
 #ifdef USE_MPI
 

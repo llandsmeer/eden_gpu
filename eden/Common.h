@@ -1,3 +1,8 @@
+/*
+ *  Common includes for all source files
+ *
+ */
+
 #ifndef COMMON_H
 #define COMMON_H
 

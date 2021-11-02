@@ -1,10 +1,14 @@
+/*
+ * and more information that is needed for the engine
+ *
+ */
+
 #ifndef ENGINECONFIG_H
 #define ENGINECONFIG_H
 
-#include "TableEntry.h"
 #include <map>
 #include "Common.h"
-
+#include "RawTables.h"
 
 #ifdef USE_MPI
 #include "mpi.h"
@@ -19,7 +23,6 @@ const int MYMPI_TAG_BUF_SEND = 99;
 #define backend_kind_cpu 1
 #define backend_kind_gpu 2
 
-// and more information that is needed for the engine
 struct EngineConfig{
 	struct TrajectoryLogger {
 		struct LogColumn{
@@ -73,7 +76,6 @@ struct EngineConfig{
     bool use_mpi = false;
     bool trove = false; // use trove library
 
-
 	std::vector<TrajectoryLogger> trajectory_loggers;
 	
 	// for inter-node communication
@@ -99,5 +101,6 @@ struct EngineConfig{
 	std::map< int, RecvList_Impl > recvlist_impls;
 	//spikes are triggered in buffer, they're automatically gathered
 };
+
 }
 #endif
