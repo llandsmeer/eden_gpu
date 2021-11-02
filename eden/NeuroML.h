@@ -2276,6 +2276,6 @@ struct Model{
 
 //------------------> Parsed representations of NeuroML entities end
 
-bool ReadNeuroML(const char *filename, Model &model, bool entire_simulation, FILE *info_log = stdout, FILE *error_log = stderr);
+bool ReadNeuroML(const char *filename, Model &model, bool entire_simulation, LogContext& logC, FILE *info_log = stdout, FILE *error_log = stderr);
 
 #endif

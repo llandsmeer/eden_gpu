@@ -25,7 +25,7 @@ double TimevalDeltaSec(const timeval &start, const timeval &end){
 	return (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) * 0.000001;
 }
 
-bool GetLineColumnFromFile(const char *filename, const ptrdiff_t file_byte_offset, long long &line, long long &column){
+bool GetLineColumnFromFile(const char *filename, ptrdiff_t file_byte_offset, long long &line, long long &column){
 	FILE* f = fopen(filename, "rb");
 	if (!f) return false;
 	
@@ -122,7 +122,7 @@ int64_t getCurrentHeapBytes(){
 }
 #endif
 
-void ReportErrorInFile_Base(FILE *error_log, const char *filename, const ptrdiff_t file_byte_offset, const char *format, va_list args){
+void ReportErrorInFile_Base(FILE *error_log, const char *filename, ptrdiff_t file_byte_offset, const char *format, va_list args){
 	//file complaint header
 	long long line = -1, column = -1;
 	if(filename){
@@ -189,7 +189,7 @@ void ReportErrorInFile_Base(FILE *error_log, const char *filename, const ptrdiff
 	ShowTheLine( filename, file_byte_offset, column, error_log  );
 	
 }
-void ReportErrorInFile(FILE *error_log, const char *filename, const ptrdiff_t file_byte_offset, const char *format, ...){
+void ReportErrorInFile(FILE *error_log, const char *filename, ptrdiff_t file_byte_offset, const char *format, ...){
 	va_list args;
 	va_start(args, format);
 	ReportErrorInFile_Base(error_log, filename, file_byte_offset, format, args);

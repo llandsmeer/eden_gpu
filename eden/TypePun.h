@@ -1,5 +1,5 @@
 //
-// Created by max on 18-10-21.
+// Created on 18-10-21.
 //
 
 #ifndef SIMHH_TYPEPUN_H

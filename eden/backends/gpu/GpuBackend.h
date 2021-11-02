@@ -6,7 +6,7 @@
 #define EDEN_GPU_GPUBACKEND_H
 
 #include <cstring>
-#include "../../AbstractBackend.h"
+#include "eden/backends/AbstractBackend.h"
 
 class GpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;

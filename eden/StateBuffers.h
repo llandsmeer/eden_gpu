@@ -1,12 +1,10 @@
 #ifndef STATEBUFFERS_H
 #define STATEBUFFERS_H
 
-
 #include <vector>
 #include "Common.h"
 #include "StringHelpers.h"
 #include "RawTables.h"
-
 
 struct StateBuffers {
     // allocate at least two state vectors, to iterate in parallel

@@ -1,8 +1,18 @@
+/*
+ * and more information that is needed for the engine
+ *
+ */
+
 #ifndef ENGINECONFIG_H
 #define ENGINECONFIG_H
 
-#include "TableEntry.h"
 #include <map>
+#include "Common.h"
+#include "RawTables.h"
+
+#ifdef USE_MPI
+#include "mpi.h"
+#endif
 
 extern "C" {
 
@@ -13,9 +23,7 @@ const int MYMPI_TAG_BUF_SEND = 99;
 #define backend_kind_cpu 1
 #define backend_kind_gpu 2
 
-// and more information that is needed for the engine
 struct EngineConfig{
-	
 	struct TrajectoryLogger {
 		struct LogColumn{
 			enum Type{
@@ -50,9 +58,15 @@ struct EngineConfig{
     struct MpiContext{
         int world_size;
         int rank;
+#ifdef USE_MPI
+        char processor_name[MPI_MAX_PROCESSOR_NAME];
+#else
+        char processor_name[15] = "LocalHost";
+#endif
     };
-
     MpiContext my_mpi;
+    LogContext log_context;
+    bool log_to_file = true;
 	long long work_items;
 	double t_initial; // in engine time units
 	double t_final;
@@ -85,10 +99,8 @@ struct EngineConfig{
 	};
 	std::map< int, SendList_Impl > sendlist_impls;
 	std::map< int, RecvList_Impl > recvlist_impls;
-	
 	//spikes are triggered in buffer, they're automatically gathered
-	
 };
-}
 
+}
 #endif

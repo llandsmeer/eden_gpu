@@ -7,24 +7,71 @@
 #include "Common.h"
 #include "GenerateModel.h"
 #include "StateBuffers.h"
-#include "GeomHelp_Base.h"
 #include "StringHelpers.h"
 
 //why is this confilicting ?
 #include "TypePun.h"
 
 #ifdef USE_MPI
-    #include "Mpi_helpers.h"
+#include <mpi.h>
+//todo fix this better...
+#define MPI_CHECK_RETURN(error_code) {                                           \
+    if (error_code != MPI_SUCCESS) {                                             \
+        char error_string[BUFSIZ];                                               \
+        int length_of_error_string;                                              \
+        int world_rank;                                                          \
+        MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);                              \
+        MPI_Error_string(error_code, error_string, &length_of_error_string);     \
+        fprintf(stderr, "%3d: %s\n", world_rank, error_string);                  \
+        exit(1);                                                                 \
+    }}
+
+static void Say(const char *format, ... ){
+    FILE *fLog = stdout;
+    va_list args;
+    va_start(args, format);
+    int dit;
+    MPI_CHECK_RETURN(MPI_Comm_rank(MPI_COMM_WORLD, &dit));
+    std::string new_format = "rank "+std::to_string(dit)+" : " + format + "\n";
+    vfprintf(fLog, new_format.c_str(), args);
+    fflush(stdout);
+    va_end (args);
+}
 #endif
 
-bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConfig &engine_config, RawTables &tabs) {
+template <typename Real>
+struct GeomHelp_Base{
+    inline static Real Length(Real dx, Real dy, Real dz){
+        return std::sqrt(dx*dx + dy*dy + dz*dz);
+    }
+    inline static Real Area(Real length, Real diam_proximal, Real diam_distal){
+        // actually just the external surface area of the frustum
+        // what about the end butt of dendrites (and soma which is actually large!), though?
+        // do what NEURON does, ignore them and let higher-level modelling software apply corrections
+        if(length == 0){
+            // spherical soma or something, TODO more robust detection at parse time too!
+            return M_PI * diam_distal * diam_distal;
+        }
+        else return (M_PI / 2.0) * (diam_proximal + diam_distal) * std::sqrt( ((diam_proximal - diam_distal) * (diam_proximal - diam_distal) / 4.0) + length * length);
+    }
+    inline static Real Volume(Real length, Real diam_proximal, Real diam_distal){
+        if(length == 0){
+            // spherical soma or something, TODO more robust detection at parse time too!
+            return (M_PI / 6.0) * diam_distal * diam_distal * diam_distal;
+        }
+        else return (M_PI / 3.0) * length * ( diam_proximal*diam_proximal + diam_distal*diam_distal + diam_proximal*diam_distal ) / 4.0;
+    }
+};
+extern "C" {
+typedef GeomHelp_Base<float> GeomHelp;
+}
 
+bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConfig &engine_config, RawTables &tabs) {
     /*
     TODO:
         decouple derivative from integration rule
         split large cells into compartment-sized work units
     */
-
     //------------------>  GENERAL INFORMATION
     /*
     Simulation parallelism assumes calculations are split in essential units, and calculations for each unit are themselves computed sequentially.
@@ -59,7 +106,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     using computation code unique to the type it is instantiated from.
 
     */
-
     //------------------>  EDEN/NEUROML INFORMATION
     /*
     Internal states are located within compartments of neurons.
@@ -91,7 +137,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         post-synaptic membrane potential
         spikes travelling through the synapses
     */
-
     /*
     Assume the essential unit is a neuron, or a compartment.
     The factors differentiating calculations for each unit are:
@@ -99,6 +144,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         Attached mechanisms (due to synapses and input sources)
     */
 
+    INIT_LOG(&engine_config.log_context.log_file,engine_config.log_context.mpi_rank);
     const auto &dimensions          = model.dimensions          ;
     const auto &component_types     = model.component_types     ;
     const auto &morphologies        = model.morphologies        ;
@@ -114,7 +160,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     const auto &target_simulation   = model.target_simulation   ;
 
     const Simulation &sim = simulations.get(target_simulation);
-
 
     // the basic RNG seed.
     // Modify using mose sim properties, LATER
@@ -638,10 +683,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     std::vector<CellInternalSignature> cell_sigs;
 
 
-
-    printf("Analyzing connectivity...\n");
     //------------------>  Scan inputs, to aid cell type analysis
     // per cell, per segment
+    log(LOG_MES) << "Analyzing connectivity..." << LOG_ENDL;
     auto GetInputIdId = [ &input_sources ]( Int input_seq ){
         const InputSource &inp = input_sources.get( input_seq );
         Int id_id;
@@ -1695,13 +1739,12 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     };
 
     // kernel file boilerplate code
-
     auto EmitKernelFileHeader = [ &config , &engine_config ]( std::string &code ){
         (void) config; // just in case
 
         char tmps[1000];
         code += "// Generated code block BEGIN\n";
-        // code += "#include <stdatomic.h>\n";
+        // code += "#include <stdatomic.h>\n";s
         code += "#define M_PI_F       3.14159265358979323846f\n";
         code += "#include <math.h>\n";
         if(config.debug){
@@ -1786,7 +1829,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         code += "}\n";
         code += "\n";
     };
-
     auto EmitWorkItemRoutineHeader = [ &config , &engine_config ]( std::string &code ){
         (void) config; // just in case
         std::string kernel_name = "doit";
@@ -1825,7 +1867,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
         code += "    \n";
     };
-
     auto EmitWorkItemRoutineFooter = [ &config , &engine_config]( std::string &code ){
         (void) config; // just in case
 
@@ -1840,7 +1881,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "trove::coalesced_ptr<long long> global_state_table_f32_sizes, trove::coalesced_ptr<Table_F32> global_state_table_f32_arrays, trove::coalesced_ptr<Table_F32> global_stateNext_table_f32_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_state_f32_index,\n"
                         "trove::coalesced_ptr<long long> global_state_table_i64_sizes, trove::coalesced_ptr<Table_I64> global_state_table_i64_arrays, trove::coalesced_ptr<Table_I64> global_stateNext_table_i64_arrays, trove::coalesced_ptr<long long> /*XXX*/ global_table_state_i64_index,\n"
                         "trove::coalesced_ptr<float> global_state, trove::coalesced_ptr<float> global_stateNext, trove::coalesced_ptr<long long> global_state_f32_index, \n"
-                        "long long step ){\n";
+                        "long long step , long long int size_of_shared_memory){\n";
             } else {
                 code += "static void __global__ doit_kernel(long long start, long long n_items,\n"
                         "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
@@ -1849,19 +1890,50 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step ){\n";
+                        "long long step, long long int size_of_shared_memory ){\n";
             }
-            code += "   int idx = blockIdx.x * blockDim.x + threadIdx.x;\n"
-                    "   if (idx >= n_items) return;\n"
-                    "   long long item = start + idx;\n"
-                    "   doit_single( time, dt, \n"
-                    "                      global_constants,                global_const_f32_index[item],       global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+            code += "                                                           \n";
+            if(config.debug) {
+                code += "  printf(\"block %d %d %d \\n\", blockIdx.x,blockDim.x,threadIdx.x); \n";
+            }
+            code += "   //Now populate the shared memory for this block                    \n"
+                    "   int idx = blockIdx.x * blockDim.x + threadIdx.x;                   \n"
+                    "   extern __shared__ float global_const_shared[];                     \n"
+                    "\n"
+                    "   for (long long int q = 0; q < (size_of_shared_memory+blockDim.x-1)/blockDim.x; q++) {                         \n"
+                    "         if(q*blockDim.x + threadIdx.x >=  size_of_shared_memory) continue;                           \n"
+                    "         global_const_shared[q*blockDim.x + threadIdx.x] = global_constants[q*blockDim.x + idx + global_const_f32_index[start] + blockIdx.x * (size_of_shared_memory-1)];\n";
+            if(config.debug) {
+            code += "         printf(\"global_const_shared[%ld] = global_constants[%ld]\\n\", q*blockDim.x + threadIdx.x, q*blockDim.x + idx + global_const_f32_index[start]+ blockIdx.x * size_of_shared_memory);\n";
+            }
+            code += "   }                                                                            \n"
+                    "   //Normal Execution                                                           \n"
+                    "   __syncthreads();                                                             \n"
+                    "   if (idx >= n_items) return;                                                  \n"
+                    "   long long item = start + idx;                                                \n"
+                    "   auto offs =   size_of_shared_memory;                                         \n"
+                    "   auto of   =   (global_const_f32_index[item]-global_const_f32_index[start]);     \n"
+                    "   auto offset = (global_const_f32_index[item]-global_const_f32_index[start]) % size_of_shared_memory;     \n";
+            if(config.debug) {
+
+                code += "  printf(\"block %d %d %d \\n offset for item %lld is %lld  -> %lld - %lld \\n\", blockIdx.x,blockDim.x,threadIdx.x,item, offset,of,offs); \n";
+            }
+            code +=  "   doit_single( time, dt, \n"
+                    "                      global_const_shared,             offset,                             global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
                     "                      global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
                     "                      global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
                     "                      global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
                     "                      global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
                     "                      step \n"
                     "                      );\n"
+                    "  // doit_single( time, dt, \n"
+                    "  //                    global_constants,                global_const_f32_index[item],       global_const_table_f32_sizes,               global_const_table_f32_arrays,         global_table_const_f32_index[item], \n"
+                    "  //                    global_const_table_i64_sizes,    global_const_table_i64_arrays,      global_table_const_i64_index[item],    \n"
+                    "  //                    global_state_table_f32_sizes,    global_state_table_f32_arrays,      global_stateNext_table_f32_arrays,          global_table_state_f32_index[item], \n"
+                    "  //                    global_state_table_i64_sizes,    global_state_table_i64_arrays,      global_stateNext_table_i64_arrays,          global_table_state_i64_index[item], \n"
+                    "  //                    global_state,                    global_stateNext,                   global_state_f32_index[item], \n"
+                    "  //                    step \n"
+                    "  //                    );\n"
                     "}\n";
 
             if (engine_config.trove) {
@@ -1873,7 +1945,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "long long *__restrict__ global_state_table_f32_sizes, Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block, cudaStream_t *streams_calculate ){\n";
+                        "long long step, int threads_per_block, ong long int size_of_shared_memory, cudaStream_t *streams_calculate ){\n";
             } else {
                 code += "void doit(long long start, long long n_items,\n"
                         "float time, float dt, const float *__restrict__ global_constants, const long long * __restrict__ /*XXX*/ global_const_f32_index, \n"
@@ -1882,16 +1954,27 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                         "const long long *__restrict__ global_state_table_f32_sizes, const Table_F32 *__restrict__ global_state_table_f32_arrays, Table_F32 *__restrict__ global_stateNext_table_f32_arrays, long long * __restrict__ /*XXX*/ global_table_state_f32_index,\n"
                         "const long long *__restrict__ global_state_table_i64_sizes,       Table_I64 *__restrict__ global_state_table_i64_arrays, Table_I64 *__restrict__ global_stateNext_table_i64_arrays, long long * __restrict__ /*XXX*/ global_table_state_i64_index,\n"
                         "const float *__restrict__ global_state, float *__restrict__ global_stateNext, long long * __restrict__ global_state_f32_index, \n"
-                        "long long step, int threads_per_block, cudaStream_t *streams_calculate){\n";
+                        "long long step, int threads_per_block, long long int size_of_shared_memory,  cudaStream_t *streams_calculate){\n";
             }
-            code += "   doit_kernel<<<(n_items+threads_per_block-1)/threads_per_block,threads_per_block,0,*streams_calculate>>>(start, n_items,\n"
-                    "       time, dt, global_constants, global_const_f32_index, \n"
-                    "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,\n"
-                    "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,\n"
+            code += " //easter is around the corner when it snows                                                            \n"
+                    "     //96KB memory of                                                                                   \n"
+                    "                                                                                                        \n"
+                    "size_t N_blocks =  (n_items+threads_per_block-1)/threads_per_block;                                     \n";
+
+            if(config.debug) {
+                code += "printf(\"Max is de Max\\n\");                                                                       \n"
+                        "printf(\"start item: %lld n_items: %ld \\n\", start, n_items);                                      \n"
+                        "printf(\"size_of_shared_mem: %lld      \\n\", size_of_shared_memory);                               \n";
+            }
+            code += "  \n"
+                    "doit_kernel<<<N_blocks,threads_per_block,size_of_shared_memory*sizeof(float),*streams_calculate>>>(start, n_items,                                \n"
+                    "       time, dt, global_constants, global_const_f32_index,                                                                          \n"
+                    "       global_const_table_f32_sizes, global_const_table_f32_arrays, global_table_const_f32_index,                                   \n"
+                    "       global_const_table_i64_sizes, global_const_table_i64_arrays, global_table_const_i64_index,                                   \n"
                     "       global_state_table_f32_sizes, global_state_table_f32_arrays, global_stateNext_table_f32_arrays, global_table_state_f32_index,\n"
                     "       global_state_table_i64_sizes, global_state_table_i64_arrays, global_stateNext_table_i64_arrays, global_table_state_i64_index,\n"
                     "       global_state, global_stateNext, global_state_f32_index, \n"
-                    "       step);\n"
+                    "       step,size_of_shared_memory);\n"
                     "}\n" ;
         }
 
@@ -1905,8 +1988,10 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     };
 
     // LATER analyze cell types before generating codes, for compartment as work item
-    printf("Creating cell types...\n");
-    // TODO build only the cells actually used
+    log(LOG_MES) << "Creating cell types... "<< LOG_ENDL;
+
+    // ----> Build the cells.
+    // TODO build only the cells actually used --
     for(size_t cell_seq = 0; cell_seq < cell_types.contents.size(); cell_seq++){
         const auto &cell_type = cell_types.contents[cell_seq];
 
@@ -1921,8 +2006,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             sig.name += "_rank_"+itos(engine_config.my_mpi.rank);
         }
 
-        printf("\nAnalyzing %s...:\n", sig.name.c_str());
-
+        log(LOG_INFO) << "Analyzing: "<< sig.name << "...:" <<  LOG_ENDL;
 
         // cell-level work items for now
         SignatureAppender_Single AppendSingle_CellScope( sig.cell_wig );
@@ -2663,7 +2747,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             std::vector<float> segment_volumes(morph.segments.contents.size(), NAN);
 
             // process connectivity
-            printf("\tAnalyzing internal connectivity...\n");
+            log(LOG_INFO) << "\tAnalyzing internal connectivity..." << LOG_ENDL;
+
             for( Int seg_seq = 0; seg_seq < (Int)morph.segments.contents.size(); seg_seq++ ){
                 const auto &seg = morph.segments.atSeq(seg_seq);
 
@@ -2675,7 +2760,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             }
 
             // process geometry of morphology
-            printf("\tAnalyzing geometry...\n");
+            log(LOG_INFO) << "\tAnalyzing geometry..." << LOG_ENDL;
             for( size_t seg_seq = 0; seg_seq < morph.segments.contents.size(); seg_seq++ ){
                 const auto &seg = morph.segments.atSeq((Int)seg_seq);
 
@@ -2708,7 +2793,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             // std::vector<int> segments_to_compartments; TODO
 
             // process passive biophysics
-            printf("\tAnalyzing cable equation...\n");
+            log(LOG_INFO) << "\tAnalyzing cable equation..." << LOG_ENDL;
             // membrane specific capacitance, axial resistivity, initial potential, threshold for (almost) every compartment(segment,actually)
             // d_lambda rule can be calculated from Cm and Ra (NEURON book, chapter 5)
             std::vector<float> segment_Cm(morph.segments.contents.size(), NAN);
@@ -2856,10 +2941,10 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                 }
             }
             float tau_total = RC_scale.ConvertTo( 1/rate_total, Scales<Time>::native);
-            printf(" total axial %g %s\n", tau_total, Scales<Time>::native.name );
 
+            log(LOG_INFO) << " total axial " << tau_total << " " <<  Scales<Time>::native.name << LOG_ENDL;
             // Now perform analysis for Backward Euler method
-            printf("\tAnalyzing Bwd Euler...\n");
+            log(LOG_INFO) << "	Analyzing Bwd Euler..." << LOG_ENDL;
             struct BackwardEuler{
 
                 const std::vector< std::vector<Int> > &conn_list;
@@ -3061,8 +3146,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
 
             // now on to parts of the physical cell
-
-            printf("Generating code for %s...:\n", sig.name.c_str());
+            log(LOG_INFO) << "Generating code for " << sig.name.c_str() <<  "...:" << LOG_ENDL;
             char tmps[10000]; // buffer for a single code line
 
             EmitKernelFileHeader( sig.code );
@@ -5225,7 +5309,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // Check if compiler is present
         // TODO XXX hoist this check higher up, to avoid overhead !
         // TODO more branching to pick the method to check presence LATER, for more compilers
-        if( system((compiler_name + " --version").c_str()) != 0 ){
+        // TODO better log this output:
+        log(LOG_INFO) << "Check the compiler: " << LOG_ENDL;
+        if( system((compiler_name + " --version > temp.txt").c_str()) != 0 ){
             std::string complaint_line = "Could not invoke '"+compiler_name+"' compiler! Make sure it is installed, and available on PATH.";
 
             std::string more_commentary;
@@ -5285,25 +5371,49 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             return false;
         }
 
+
+        //some decent but hacky printing
+        {
+            std::ifstream file("temp.txt");
+            if (file.is_open()) {
+                std::string line;
+                while (std::getline(file, line)) {
+                    log(LOG_INFO) << "\t" << line << LOG_ENDL;
+                }
+                file.close();
+            }
+        }
+
         // NOTE -lm must be put last, after other obj files (like source code) have stated their dependencies on libm
         // further reading: https://eli.thegreenplace.net/2013/07/09/library-order-in-static-linking
         std::string cmdline =     compiler_name + " " + basic_flags + dll_flags + code_quality_flags + " -o " + dll_filename + " " + code_filename + lm_flags;
-        printf("%s\n", cmdline.c_str());
+        log(LOG_INFO) << cmdline.c_str() << LOG_ENDL;
         std::string cmdline_asm = compiler_name + " " + basic_flags + dll_flags + code_quality_flags + asm_flags + " " + code_filename + lm_flags;
         if(config.output_assembly){
-            if( system(cmdline_asm.c_str()) != 0 ){
+            if( system((cmdline_asm + "> temp.txt").c_str()) != 0 ){
                 fprintf(stderr, "Could not build %s assembly\n", dll_filename.c_str());
                 return false;
             }
+            //some decent hacky printing.
+            {
+                std::ifstream file("temp.txt");
+                if (file.is_open()) {
+                    std::string line;
+                    while (std::getline(file, line)) {
+                        log(LOG_INFO) << "\t" << line << LOG_ENDL;
+                    }
+                    file.close();
+                }
+            }
         }
-        if( system(cmdline.c_str()) != 0 ){
+        if( system((cmdline + "> temp.txt").c_str()) != 0 ){
             fprintf(stderr, "Could not build %s\n", dll_filename.c_str());
             return false;
         }
 
         // load the code
         std::string function_name = "doit";
-        IterationCallback callback = NULL;
+        IterationCallback callback = nullptr;
 
 #if defined (__linux__) || defined(__APPLE__)
         void *dll_handle = dlopen(("./"+dll_filename).c_str(), RTLD_NOW);
@@ -5346,19 +5456,12 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         // LATER keep a set of dynamic libraries loaded, to cleanup
         // though it's pointless in this sort of application
         gettimeofday(&compile_end, NULL);
-        printf("Compiled and loaded %s in %.2lf seconds\n", code_id.c_str(), TimevalDeltaSec(compile_start, compile_end));
-
-
+        log(LOG_TIME) << "Compiled and loaded" << code_id << " in "<<TimevalDeltaSec(compile_start, compile_end) <<" seconds" << LOG_ENDL;
         cell_sigs.push_back(sig);
-    }
-    // LATER further specialize cell types with synapse and input components INSIDE the per-cell code block, for better legibility, but how?
+    } // LATER further specialize cell types with synapse and input components INSIDE the per-cell code block, for better legibility, but how?
 
-
-    // now realize the model
-
-    //------------------> Generate the data structures
-
-
+    // ----> Now realize the model
+    // Generate the data structures
     // Instantiate cells, with internal working sets onto global tables and extension tables onto inner table space
     // Simplest layout : Array of Structures, lay out states and constants for every single cell, side by side
     // TODO structure-of-arrays transformation, at least over block-wise intervals
@@ -5366,7 +5469,6 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     // TODO instantiate more global constants
 
     typedef ptrdiff_t work_t;
-
 
     // symbolic fererence to some point, on some neuron, under NeuroML
     // perhaps move this to be more general, in header LATER
@@ -5416,185 +5518,181 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         }
     };
 
+//    MPI STUFF
 #ifdef USE_MPI
+        // get lists of what to be sent, in model-specific symbolic references -
+        // not references to realized work items, because each node may handle this differently
 
-    // get lists of what to be sent, in model-specific symbolic references -
-    // not references to realized work items, because each node may handle this differently
+        // symbolic reference to a DataWriter
+        struct DawRef {
+            // just its position on the NeuroML-supplied list
+            Int daw_seq;
+            Int col_seq;
 
-    // symbolic reference to a DataWriter
-    struct DawRef{
-        // just its position on the NeuroML-supplied list
-        Int daw_seq;
-        Int col_seq;
+            bool operator<(const DawRef &rhs) const {
+                if (daw_seq < rhs.daw_seq) return true;
+                if (daw_seq > rhs.daw_seq) return false;
+                if (col_seq < rhs.col_seq) return true;
+                if (col_seq > rhs.col_seq) return false;
 
-        bool operator<( const DawRef &rhs ) const {
-            if( daw_seq    < rhs.daw_seq    ) return true;
-            if( daw_seq    > rhs.daw_seq    ) return false;
-            if( col_seq    < rhs.col_seq    ) return true;
-            if( col_seq    > rhs.col_seq    ) return false;
+                return false;
+            }
 
-            return false;
-        }
+            std::string toPresentableString() const {
+                std::string ret;
+                ret +=
+                        "(daw " + presentable_string(daw_seq)
+                        + ", col " + presentable_string(col_seq)
+                        + ")";
+                return ret;
+            }
 
-        std::string toPresentableString() const {
-            std::string ret;
-            ret +=
-                "(daw " + presentable_string(daw_seq)
-                + ", col " + presentable_string(col_seq)
-                + ")";
-            return ret;
-        }
+            void toEncodedString(std::string &out_str) const {
+                out_str +=
+                        accurate_string(daw_seq) + " "
+                        + accurate_string(col_seq);
+            }
 
-        void toEncodedString( std::string &out_str ) const {
-            out_str +=
-                accurate_string(daw_seq) + " "
-                + accurate_string(col_seq)
-            ;
-        }
-        bool fromEncodedString( const char *in_str ){
-            if( sscanf( in_str, "%ld %ld ", &daw_seq, &col_seq ) != 2 ) return false;
-            // would do more checking, if it wasn't internally used
+            bool fromEncodedString(const char *in_str) {
+                if (sscanf(in_str, "%ld %ld ", &daw_seq, &col_seq) != 2) return false;
+                // would do more checking, if it wasn't internally used
+                return true;
+            }
+
+        };
+
+        // list of what this node sends to peers that need it
+        struct SendList {
+            // Order in vectors is same as order in sent packet
+            // (and is the order that the receiver requested)
+            std::vector<PointOnCellLocator> vpeer_sources;
+            std::vector<DawRef> daw_refs;
+            std::vector<PointOnCellLocator> spike_sources;
+        };
+
+        // list of what this node needs from other peers
+        struct RecvList {
+
+            // existing references to state variables, to be remapped to the mirror buffers according to type and point on cell
+            std::map<PointOnCellLocator, std::vector<TabEntryRef_Packed> > vpeer_refs;
+
+            // positions of trigger buffers, to be updated by spikes originating from points on cell
+            std::map<PointOnCellLocator, std::vector<TabEntryRef_Packed> > spike_refs;
+
+            // if a logging node, it needs to record values on remote work items
+            std::set<DawRef> daw_refs;
+        };
+
+        // not the send/recv buffers themselves, but lists of references
+        std::map<int, SendList> send_lists; // per adjacent node
+        std::map<int, RecvList> recv_lists; // per adjacent node
+
+        // put a provisional table entry, and keep track of these dependencies
+        // such table entries _will_ be remapped to point to the corresponding positions on send/recv buffers
+        auto AppendRemoteDependency_Vpeer = [&tabs, &recv_lists](const PointOnCellLocator &loc, int remote_node, size_t glob_tab_Vpeer) {
+
+            auto &table = tabs.global_tables_const_i64_arrays.at(glob_tab_Vpeer);
+
+            long long entry = table.size();
+
+            TabEntryRef_Packed packed_id = GetEncodedTableEntryId(glob_tab_Vpeer, entry);
+
+            recv_lists[remote_node].vpeer_refs[loc].push_back(packed_id);
+
+            long long temp_id = -100 - remote_node;
+            table.push_back(temp_id);
+
             return true;
-        }
+        };
+        auto AppendRemoteDependency_Spike = [&recv_lists](const PointOnCellLocator &loc, int remote_node, TabEntryRef_Packed trig_buf_ref) {
+            // printf("remotespike %d, %s, %llx, %zd\n", remote_node, loc.toPresentableString().c_str(), trig_buf_ref, recv_lists[remote_node].spike_refs[loc].size() );
+            recv_lists[remote_node].spike_refs[loc].push_back(trig_buf_ref);
 
-    };
+            return true;
+        };
+        auto AppendRemoteDependency_DataWriter = [&recv_lists](const DawRef &dawref, int remote_node) {
 
+            recv_lists[remote_node].daw_refs.insert(dawref);
 
-    // list of what this node sends to peers that need it
-    struct SendList{
-        // Order in vectors is same as order in sent packet
-        // (and is the order that the receiver requested)
-        std::vector<PointOnCellLocator> vpeer_sources;
-        std::vector<DawRef> daw_refs;
-        std::vector<PointOnCellLocator> spike_sources;
-    };
+            return true;
+        };
 
-    // list of what this node needs from other peers
-    struct RecvList{
+        // like  workunit_per_cell_per_population, but explicitly referring to local node's fragment of the model
+        std::vector<std::map<Int, work_t> > local_workunit_per_cell_per_population((engine_config.use_mpi) * net.populations.contents.size()); // will extend to include segments, somehow LATER
 
-        // existing references to state variables, to be remapped to the mirror buffers according to type and point on cell
-        std::map< PointOnCellLocator, std::vector< TabEntryRef_Packed > > vpeer_refs;
+        // Since the model is presented in its entirety, nodes need to perform domain decomposition themselves
+        // Unfortunately, this means all nodes need to consider the existence of neuron Global ID's of all peers
+        // LATER make a file format that enables fully distributed loading, through pre-processed domain decomposition (using e.g. METIS, or Scotch)
 
-        // positions of trigger buffers, to be updated by spikes originating from points on cell
-        std::map< PointOnCellLocator, std::vector< TabEntryRef_Packed > > spike_refs;
+        // Mapping of neuron GIDs <-> ( nodes, work items, PointOnCellLocator's )
+        std::map<Int, int> neuron_gid_to_node;
+        std::vector<std::map<Int, Int> > neuron_gid_per_cell_per_population((engine_config.use_mpi) * net.populations.contents.size());
 
-        // if a logging node, it needs to record values on remote work items
-        std::set< DawRef > daw_refs;
-    };
+        // for local neurons only
+        std::map<Int, work_t> neuron_gid_to_workitem;
 
-    // not the send/recv buffers themselves, but lists of references
-    std::map< int, SendList > send_lists; // per adjacent node
-    std::map< int, RecvList > recv_lists; // per adjacent node
+        // similar to PointOnCellLocator
+        // TODO refactor better
+        struct CellLocator_PopInst {
+            Int pop_seq;
+            Int inst_seq;
 
-    // put a provisional table entry, and keep track of these dependencies
-    // such table entries _will_ be remapped to point to the corresponding positions on send/recv buffers
-    auto AppendRemoteDependency_Vpeer = [ &tabs, &recv_lists ]( const PointOnCellLocator &loc, int remote_node, size_t glob_tab_Vpeer ){
+            CellLocator_PopInst(Int _p, Int _i) {
+                pop_seq = _p;
+                inst_seq = _i;
+            }
+        };
+        std::map<Int, CellLocator_PopInst> neuron_gid_to_popinst;
 
-        auto &table = tabs.global_tables_const_i64_arrays.at(glob_tab_Vpeer);
+        // and helper functions, to not mess with the data structures directly (TODO refactor into object)
+        auto GetLocalWorkItem_FromPopInst = [&net, &local_workunit_per_cell_per_population](Int pop_seq, Int cell_seq) {
 
-        long long entry = table.size();
+            // sanity check
+            if (!(0 <= pop_seq && pop_seq < (Int) net.populations.contents.size())) return (ptrdiff_t) -1;
 
-        TabEntryRef_Packed packed_id = GetEncodedTableEntryId( glob_tab_Vpeer, entry );
+            auto &hm = local_workunit_per_cell_per_population[pop_seq];
 
-        recv_lists[remote_node].vpeer_refs[loc].push_back(packed_id);
+            if (!hm.count(cell_seq)) return (ptrdiff_t) -1;
 
-        long long temp_id = -100 - remote_node;
-        table.push_back(temp_id);
+            return hm.at(cell_seq);
+        };
+        auto GetGlobalGid_FromPopInst = [&net, &neuron_gid_per_cell_per_population](Int pop_seq, Int cell_seq) {
 
-        return true;
-    };
-    auto AppendRemoteDependency_Spike = [ &recv_lists ]( const PointOnCellLocator &loc, int remote_node, TabEntryRef_Packed trig_buf_ref ){
-        // printf("remotespike %d, %s, %llx, %zd\n", remote_node, loc.toPresentableString().c_str(), trig_buf_ref, recv_lists[remote_node].spike_refs[loc].size() );
-        recv_lists[remote_node].spike_refs[loc].push_back(trig_buf_ref);
+            // sanity check
+            if (!(0 <= pop_seq && pop_seq < (Int) net.populations.contents.size())) return (ptrdiff_t) -1;
 
-        return true;
-    };
-    auto AppendRemoteDependency_DataWriter = [ &recv_lists ]( const DawRef &dawref, int remote_node ){
+            auto &hm = neuron_gid_per_cell_per_population[pop_seq];
 
-        recv_lists[remote_node].daw_refs.insert(dawref);
+            if (!hm.count(cell_seq)) return (ptrdiff_t) -1;
 
-        return true;
-    };
+            return hm.at(cell_seq);
+        };
+        auto GetRemoteNode_FromPopInst = [&GetGlobalGid_FromPopInst, &neuron_gid_to_node](Int pop_seq, Int cell_seq) {
+            // sanity check
 
-    // like  workunit_per_cell_per_population, but explicitly referring to local node's fragment of the model
-    std::vector< std::map<Int, work_t> >  local_workunit_per_cell_per_population( (engine_config.use_mpi)*net.populations.contents.size() ); // will extend to include segments, somehow LATER
+            Int gid = GetGlobalGid_FromPopInst(pop_seq, cell_seq);
+            if (gid < 0) return (int) ~0xABadD00d;
 
+            if (!neuron_gid_to_node.count(gid)) {
+                printf("Internal error: missing node for neuron gid %ld\n", gid);
+                return (int) ~0xABadD00d;
+            }
 
-    // Since the model is presented in its entirety, nodes need to perform domain decomposition themselves
-    // Unfortunately, this means all nodes need to consider the existence of neuron Global ID's of all peers
-    // LATER make a file format that enables fully distributed loading, through pre-processed domain decomposition (using e.g. METIS, or Scotch)
+            return neuron_gid_to_node.at(gid);
+        };
 
-    // Mapping of neuron GIDs <-> ( nodes, work items, PointOnCellLocator's )
+        // Maps neuron instance to either non-negative local work item, or negative ~(remote_node_id)
+        auto WorkUnitOrNode = [&GetLocalWorkItem_FromPopInst, &GetRemoteNode_FromPopInst](int pop, int cell_inst) {
+            work_t ret = GetLocalWorkItem_FromPopInst(pop, cell_inst);
+            // Say("pop %d %d = %llx", pop, cell_inst, (long long)ret);
 
-    std::map< Int, int > neuron_gid_to_node;
-    std::vector< std::map<Int, Int> > neuron_gid_per_cell_per_population( (engine_config.use_mpi)*net.populations.contents.size() );
+            if (ret < 0) {
+                ret = ~GetRemoteNode_FromPopInst(pop, cell_inst);
+            }
+            // Say("popp %d %d = %llx", pop, cell_inst, (long long)ret);
 
-    // for local neurons only
-    std::map< Int, work_t > neuron_gid_to_workitem;
-
-    // similar to PointOnCellLocator
-    // TODO refactor better
-    struct CellLocator_PopInst {
-        Int pop_seq;
-        Int inst_seq;
-        CellLocator_PopInst( Int _p, Int _i ){
-            pop_seq = _p;
-            inst_seq = _i;
-        }
-    };
-    std::map< Int, CellLocator_PopInst > neuron_gid_to_popinst;
-
-    // and helper functions, to not mess with the data structures directly (TODO refactor into object)
-    auto GetLocalWorkItem_FromPopInst = [ &net, &local_workunit_per_cell_per_population  ]( Int pop_seq, Int cell_seq ){
-
-        // sanity check
-        if(!( 0 <= pop_seq && pop_seq < (Int)net.populations.contents.size() )) return (ptrdiff_t) -1;
-
-        auto &hm = local_workunit_per_cell_per_population[pop_seq];
-
-        if( !hm.count(cell_seq) ) return (ptrdiff_t) -1;
-
-        return hm.at(cell_seq);
-    };
-
-    auto GetGlobalGid_FromPopInst = [ &net, &neuron_gid_per_cell_per_population  ]( Int pop_seq, Int cell_seq ){
-
-        // sanity check
-        if(!( 0 <= pop_seq && pop_seq < (Int)net.populations.contents.size() )) return (ptrdiff_t) -1;
-
-        auto &hm = neuron_gid_per_cell_per_population[pop_seq];
-
-        if( !hm.count(cell_seq) ) return (ptrdiff_t) -1;
-
-        return hm.at(cell_seq);
-    };
-
-    auto GetRemoteNode_FromPopInst = [ &GetGlobalGid_FromPopInst, &neuron_gid_to_node ]( Int pop_seq, Int cell_seq ){
-        // sanity check
-
-        Int gid = GetGlobalGid_FromPopInst( pop_seq, cell_seq );
-        if( gid < 0 ) return (int) ~0xABadD00d;
-
-        if( !neuron_gid_to_node.count(gid) ){
-            printf("Internal error: missing node for neuron gid %ld\n", gid);
-            return (int) ~0xABadD00d;
-        }
-
-        return neuron_gid_to_node.at(gid);
-    };
-
-    // Maps neuron instance to either non-negative local work item, or negative ~(remote_node_id)
-    auto WorkUnitOrNode = [ &GetLocalWorkItem_FromPopInst, &GetRemoteNode_FromPopInst ]( int pop, int cell_inst ){
-        work_t ret = GetLocalWorkItem_FromPopInst( pop, cell_inst );
-        // Say("pop %d %d = %llx", pop, cell_inst, (long long)ret);
-
-        if( ret < 0 ){
-            ret = ~GetRemoteNode_FromPopInst( pop, cell_inst );
-        }
-        // Say("popp %d %d = %llx", pop, cell_inst, (long long)ret);
-
-        return ret;
-    };
+            return ret;
+        };
 
 #endif
 
@@ -5608,8 +5706,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
     std::vector< std::vector<size_t> >  workunit_per_cell_per_population( (!engine_config.use_mpi) * net.populations.contents.size() ); // will extend to include segments, somehow LATER
     // GetLocalWorkItem_FromPopInst
 
-    printf("Creating populations...\n");
-
+    log(LOG_INFO) << "Creating populations..." << LOG_ENDL;
     auto InstantiateCellAsWorkitem = [ &config, &input_sources, &tabs ](
             const CellType &cell_type, const CellInternalSignature &sig,
             Int cell_gid, // for intra-cell randomization
@@ -5773,12 +5870,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         total_neurons += (int) pop.instances.size();
     }
 
-    if (engine_config.use_mpi) {
-        Say("Total neurons: %d", total_neurons);
-    } else {
-        printf("Total neurons: %d", total_neurons);
-    }
-
+    log(LOG_INFO) << "Total neurons: " << total_neurons << LOG_ENDL;
 
     // TODO this is where splitting happens
     // TODO simplest domain decomposition: by neuron GID
@@ -5820,6 +5912,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         }
     };
 
+    //the node mapper.
     NodeMapper to_node(engine_config.my_mpi.world_size, total_neurons );
 #endif
 
@@ -5880,7 +5973,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
     }
     gettimeofday(&time_pops_end, NULL);
-    printf("Created populations in %.4lf sec.\n",TimevalDeltaSec(time_pops_start, time_pops_end));
+
+    log(LOG_TIME) << "Created populations in " <<  TimevalDeltaSec(time_pops_start, time_pops_end) << " sec" <<  LOG_ENDL;
 
     // Add some extra misc-purpose tables
     tabs.global_const_tabref = tabs.global_tables_const_f32_arrays.size();
@@ -6052,497 +6146,490 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
         return global_idx_V_peer;
     };
 #endif
-    // create connectivity after cells are instantiated, for simplicity:
 
-    // also populate the inputs
-    printf("Creating inputs...\n");
 
-    timeval time_inps_start, time_inps_end;
-    gettimeofday(&time_inps_start, NULL);
+    // create connectivity after cells are instantiated, for simplicity: --also populate the inputs
+    {
+        log(LOG_INFO) << "Creating inputs..." << LOG_ENDL;
+        timeval time_inps_start, time_inps_end;
+        gettimeofday(&time_inps_start, NULL);
+        for (size_t inp_seq = 0; inp_seq < net.inputs.size(); inp_seq++) {
+            const auto &inp = net.inputs[inp_seq];
+            // printf("input cell %ld seq %ld\n", (Int)inp.cell_instance, (Int)inp.segment );
+            const auto &source = input_sources.get(inp.component_type);
+            const auto &pop = net.populations.get(inp.population);
 
-    for(size_t inp_seq = 0; inp_seq < net.inputs.size(); inp_seq++){
-        const auto &inp = net.inputs[inp_seq];
-        // printf("input cell %ld seq %ld\n", (Int)inp.cell_instance, (Int)inp.segment );
-        const auto &source = input_sources.get(inp.component_type);
-        const auto &pop = net.populations.get(inp.population);
+            // get Cell type/Compartment instance
+            const auto &sig = cell_sigs[pop.component_cell];
 
-        // get Cell type/Compartment instance
-        const auto &sig = cell_sigs[pop.component_cell];
-
-        //get work unit from type/population/instance
-        long long work_unit;
+            //get work unit from type/population/instance
+            long long work_unit;
 #ifdef USE_MPI
-        if (engine_config.use_mpi) {
-            work_unit = (size_t)GetLocalWorkItem_FromPopInst( inp.population, inp.cell_instance );
-            if( work_unit < 0 ) continue;
-        } else {
-            work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
-        }
+            if (engine_config.use_mpi) {
+                work_unit = (size_t) GetLocalWorkItem_FromPopInst(inp.population, inp.cell_instance);
+                if (work_unit < 0) continue;
+            } else {
+                work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
+            }
 #else
-        work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
-        // branch for whole cell or compartment LATER
-#endif
-
-        const auto &inpimps = GetCompartmentInputImplementations(sig, pop.component_cell, inp.segment, inp.fractionAlong);
-
-        // get Input type
-        Int id_id = GetInputIdId( inp.component_type );
-
-        if( !inpimps.count(id_id) ){
-            printf("Internal error: No input implementation for input type %ld\n", id_id);
-            return false;
-        }
-        const CellInternalSignature::InputImplementation &inpimp = inpimps.at(id_id);
-
-        // consider the common tables such as weight
-        const auto off_cf32 = tabs.global_table_const_f32_index[work_unit];
-        // const auto off_sf32 = tabs.global_table_state_f32_index[work_unit];
-        const auto off_si64 = tabs.global_table_state_i64_index[work_unit];
-        auto &tab_cf32 = tabs.global_tables_const_f32_arrays;
-        // auto &tab_sf32 = tabs.global_tables_state_f32_arrays;
-        auto &tab_si64 = tabs.global_tables_state_i64_arrays;
-
-        // TODO something about the LEMS weight property, or ignore it if LEMS does so
-        float weight = inp.weight;
-        if( !std::isfinite(weight) ) weight = 1;
-        tab_cf32[ off_cf32 + inpimp.Table_Weight ].push_back(weight);
-
-        // helpers
-        auto PopulateSpikeList = [ &tab_cf32, &off_cf32, &tab_si64, &off_si64 ]( const auto &spike_list, auto &inpimp ){
-            // append spike list to the common vector, also a sentinel to avoid checking the indices
-            // also append a start and an initial position
-            RawTables::Table_F32 &times = tab_cf32[off_cf32 + inpimp.Table_SpikeListTimes];
-            //RawTables::Table_F32 &starts = tab_ci64[off_ci64 + inpimp.Table_SpikeListStarts];
-            RawTables::Table_I64 &positions = tab_si64[off_si64 + inpimp.Table_SpikeListPos];
-
-            positions.push_back( times.size() );
-
-            for( auto spike : spike_list ) times.push_back( spike.time_of_occurrence );
-            times.push_back( FLT_MAX ); // sentinel value
-
-        };
-
-        // could re-use globals LATER
-        if(id_id < 0){
-            InputSource::Type core_id = InputSource::Type(id_id + InputSource::Type::MAX);
-
-            switch(core_id){
-
-                case InputSource::Type::PULSE :{
-
-                    RawTables::Table_F32 &Imax = tab_cf32[off_cf32 + inpimp.Table_Imax];
-                    RawTables::Table_F32 &start = tab_cf32[off_cf32 + inpimp.Table_Delay];
-                    RawTables::Table_F32 &duration = tab_cf32[off_cf32 + inpimp.Table_Duration];
-
-                    Imax.push_back(source.amplitude);
-                    start.push_back(source.delay);
-                    duration.push_back(source.duration);
-
-                    break;
-                }
-                case InputSource::Type::SPIKE_LIST :{
-
-                    PopulateSpikeList( source.spikes, inpimp );
-
-                    break;
-                }
-                default:
-                    // internal error
-                    printf("populate: Unknown input core_id %d\n", core_id);
-                    return false;
-            }
-        }
-        else{
-            if(
-                    source.type == InputSource::Type::TIMED_SYNAPTIC
-                    || source.type == InputSource::Type::POISSON_SYNAPSE
-                    || source.type == InputSource::Type::POISSON_SYNAPSE_TRANSIENT
-                    ){
-
-                if( source.type == InputSource::Type::TIMED_SYNAPTIC ){
-                    PopulateSpikeList( source.spikes, inpimp );
-                }
-                else if(
-                        source.type == InputSource::Type::POISSON_SYNAPSE
-                        || source.type == InputSource::Type::POISSON_SYNAPSE_TRANSIENT
-                        ){
-                    DescribeLems_AppendTableEntry( work_unit, source.component, inpimp.component );
-                }
-                else{
-                    printf("internal error: input component %ld append for what sort of firing synapse input? \n", id_id);
-                    return false;
-                }
-
-                // and append comp. signature to tables of same type
-                const auto &syn = synaptic_components.get(source.synapse);
-                if( !AppendSyncompInternals( syn, GetSynapseIdId(source.synapse), work_unit, inpimp.synimpl, tabs ) ) return false;
-
-            }
-            else if( source.component.ok() ){
-                DescribeLems_AppendTableEntry( work_unit, source.component, inpimp.component );
-            }
-            else{
-                printf("internal error: populate unknown input id %ld\n", id_id);
-                return false;
-            }
-        }
-
-    }
-
-    gettimeofday(&time_inps_end, NULL);
-    printf("Created inputs in %.4lf sec.\n",TimevalDeltaSec(time_inps_start, time_inps_end));
-
-    // also populate the synapses
-    // place the append syncomp lambda somewhere here LATER
-    printf("Creating synapses...\n");
-
-    timeval time_syns_start, time_syns_end;
-    gettimeofday(&time_syns_start, NULL);
-
-    for(size_t proj_seq = 0; proj_seq < net.projections.contents.size(); proj_seq++){
-
-        // printf("Projection %zd of %zd \n", proj_seq, net.projections.contents.size() );
-
-        const auto &proj = net.projections.contents.at(proj_seq);
-        const auto &prepop = net.populations.get(proj.presynapticPopulation);
-        const auto &postpop = net.populations.get(proj.postsynapticPopulation);
-
-        // get Cell type/Compartment instance. TODO remove.
-        const auto &presig = cell_sigs[prepop.component_cell];
-        const auto &postsig = cell_sigs[postpop.component_cell];
-
-        auto AppendSynapticComponentEntries = [
-                &model, &prepop, &AppendSyncompInternals, &GetSynapseIdId,
-                &GetCompartmentSynapseImplementations, &GetCompartmentSpikerImplementation, &GetCompartmentVoltageStatevarIndex,
-                &engine_config
-#ifdef USE_MPI
-                , &AppendRemoteDependency_Vpeer, &AppendRemoteDependency_Spike
-#endif
-        ](
-                const SynapticComponent &syn, Int syncomp_seq, const Network::Projection::Connection &conn,
-                const PointOnCellLocator &mine_loc,
-                const PointOnCellLocator &peer_loc,
-                work_t work_unit, const CellInternalSignature &sig, Int mine_cell_type_seq,
-                work_t peer_work_unit,const CellInternalSignature &peer_sig, Int peer_cell_type_seq,
-                RawTables &tabs
-        ){
-            // TODO perhaps early exit if local work item is remote
+            work_unit = workunit_per_cell_per_population[inp.population][inp.cell_instance];
             // branch for whole cell or compartment LATER
+#endif
 
-            Int id_id = GetSynapseIdId( syncomp_seq );
+            const auto &inpimps = GetCompartmentInputImplementations(sig, pop.component_cell, inp.segment, inp.fractionAlong);
 
-            const bool needs_spike = syn.HasSpikeIn(model.component_types);
-            const bool needs_Vpeer = syn.HasVpeer(model.component_types);
+            // get Input type
+            Int id_id = GetInputIdId(inp.component_type);
 
-            // get weight value early on, just in case remote may need it ...?
-            Real weight = conn.weight;
-            if( !std::isfinite(weight) ) weight = 1;
-
-            // get the underlying mechanism
-            // TODO might not exist, if this node doesn't work with this cell type
-            const auto &synimps = GetCompartmentSynapseImplementations( mine_loc );
-            if(!synimps.count(id_id)){
-                printf("Internal error: No impl signature for type %ld\n", id_id);
-                printf("Synimps: " );
-                for( auto keyval : synimps ) printf("%ld ", keyval.first );
-                printf("\n" );
+            if (!inpimps.count(id_id)) {
+                printf("Internal error: No input implementation for input type %ld\n", id_id);
                 return false;
             }
-            const CellInternalSignature::SynapticComponentImplementation &synimpl = synimps.at(id_id);
+            const CellInternalSignature::InputImplementation &inpimp = inpimps.at(id_id);
 
-            // also add weight
-            auto AddWeight = [ &tabs ]( work_t work_unit, const auto &synimpl, Real weight ){
-                if( work_unit < 0 ){
-                    return true; // not on this node
-                }
-                const auto off_cf32 = tabs.global_table_const_f32_index[work_unit];
-                auto      &tab_cf32 = tabs.global_tables_const_f32_arrays;
+            // consider the common tables such as weight
+            const auto off_cf32 = tabs.global_table_const_f32_index[work_unit];
+            // const auto off_sf32 = tabs.global_table_state_f32_index[work_unit];
+            const auto off_si64 = tabs.global_table_state_i64_index[work_unit];
+            auto &tab_cf32 = tabs.global_tables_const_f32_arrays;
+            // auto &tab_sf32 = tabs.global_tables_state_f32_arrays;
+            auto &tab_si64 = tabs.global_tables_state_i64_arrays;
 
-                tab_cf32[ off_cf32 + synimpl.Table_Weight ].push_back(weight);
-                return true;
+            // TODO something about the LEMS weight property, or ignore it if LEMS does so
+            float weight = inp.weight;
+            if (!std::isfinite(weight)) weight = 1;
+            tab_cf32[off_cf32 + inpimp.Table_Weight].push_back(weight);
+
+            // helpers
+            auto PopulateSpikeList = [&tab_cf32, &off_cf32, &tab_si64, &off_si64](const auto &spike_list, auto &inpimp) {
+                // append spike list to the common vector, also a sentinel to avoid checking the indices
+                // also append a start and an initial position
+                RawTables::Table_F32 &times = tab_cf32[off_cf32 + inpimp.Table_SpikeListTimes];
+                //RawTables::Table_F32 &starts = tab_ci64[off_ci64 + inpimp.Table_SpikeListStarts];
+                RawTables::Table_I64 &positions = tab_si64[off_si64 + inpimp.Table_SpikeListPos];
+
+                positions.push_back(times.size());
+
+                for (auto spike : spike_list) times.push_back(spike.time_of_occurrence);
+                times.push_back(FLT_MAX); // sentinel value
+
             };
-            bool uses_weight = true; // might be elided LATER
-            if( uses_weight ) AddWeight( work_unit, synimpl, weight );
 
-            if( needs_Vpeer ){
+            // could re-use globals LATER
+            if (id_id < 0) {
+                InputSource::Type core_id = InputSource::Type(id_id + InputSource::Type::MAX);
 
-                auto AddGap = [
-                        &GetCompartmentVoltageStatevarIndex,
-                        &engine_config
-#ifdef USE_MPI
-                        , &AppendRemoteDependency_Vpeer
-#endif
-                ](
-                        const SynapticComponent &syn,
-                        work_t work_unit, const CellInternalSignature::SynapticComponentImplementation &synimpl, //const CellInternalSignature &sig, Int seg_seq,
-                        work_t peer_work_unit,const CellInternalSignature &peer_sig, Int peer_cell_type_seq,
-                        const PointOnCellLocator &peer_loc,
-                        auto &tabs
-                ){
+                switch (core_id) {
 
-                    if( work_unit < 0 ){
-                        return true; // not mine, let the need to send emerge
+                    case InputSource::Type::PULSE : {
+
+                        RawTables::Table_F32 &Imax = tab_cf32[off_cf32 + inpimp.Table_Imax];
+                        RawTables::Table_F32 &start = tab_cf32[off_cf32 + inpimp.Table_Delay];
+                        RawTables::Table_F32 &duration = tab_cf32[off_cf32 + inpimp.Table_Duration];
+
+                        Imax.push_back(source.amplitude);
+                        start.push_back(source.delay);
+                        duration.push_back(source.duration);
+
+                        break;
                     }
+                    case InputSource::Type::SPIKE_LIST : {
 
+                        PopulateSpikeList(source.spikes, inpimp);
 
-                    const auto off_ci64 = tabs.global_table_const_i64_index[work_unit];
-                    auto &tab_ci64 = tabs.global_tables_const_i64_arrays;
-
-                    auto glob_tab_Vpeer = off_ci64 + synimpl.Table_Vpeer;
-
-                    RawTables::Table_I64 &Vpeer = tab_ci64.at(glob_tab_Vpeer);
-
-                    // if it exists on this node
-#if USE_MPI
-                    if (engine_config.use_mpi) {
-                        if( peer_work_unit < 0 ){
-
-                            int node_peer = ~(peer_work_unit);
-                            // get the value from remote peer
-                            if( !AppendRemoteDependency_Vpeer( peer_loc, node_peer, glob_tab_Vpeer ) ) return false;
-                            return true;
-                        }
+                        break;
                     }
-#endif
-                    // otherwise it's local
-                    ptrdiff_t local_idx_V_peer = GetCompartmentVoltageStatevarIndex( peer_sig, peer_cell_type_seq, peer_loc.segment, peer_loc.fractionAlong );
+                    default:
+                        // internal error
+                        printf("populate: Unknown input core_id %d\n", core_id);
+                        return false;
+                }
+            } else {
+                if (
+                        source.type == InputSource::Type::TIMED_SYNAPTIC
+                        || source.type == InputSource::Type::POISSON_SYNAPSE
+                        || source.type == InputSource::Type::POISSON_SYNAPSE_TRANSIENT
+                        ) {
 
-                    if( local_idx_V_peer < 0 ){
-                        printf("internal error: gap junction realization: Cell type %ld has no Vpeer\n",peer_cell_type_seq );
+                    if (source.type == InputSource::Type::TIMED_SYNAPTIC) {
+                        PopulateSpikeList(source.spikes, inpimp);
+                    } else if (
+                            source.type == InputSource::Type::POISSON_SYNAPSE
+                            || source.type == InputSource::Type::POISSON_SYNAPSE_TRANSIENT
+                            ) {
+                        DescribeLems_AppendTableEntry(work_unit, source.component, inpimp.component);
+                    } else {
+                        printf("internal error: input component %ld append for what sort of firing synapse input? \n", id_id);
                         return false;
                     }
 
-                    // get reference to where peer's voltage is located
-                    ptrdiff_t global_idx_V_peer = tabs.global_state_f32_index[peer_work_unit] + local_idx_V_peer;
-                    auto global_tabentry = GetEncodedTableEntryId( tabs.global_state_tabref, global_idx_V_peer);
+                    // and append comp. signature to tables of same type
+                    const auto &syn = synaptic_components.get(source.synapse);
+                    if (!AppendSyncompInternals(syn, GetSynapseIdId(source.synapse), work_unit, inpimp.synimpl, tabs)) return false;
 
-                    Vpeer.push_back(global_tabentry);
-
-                    return true;
-                };
-
-                if( !AddGap(syn, work_unit, synimpl, peer_work_unit, peer_sig, peer_cell_type_seq, peer_loc, tabs) ) return false;
+                } else if (source.component.ok()) {
+                    DescribeLems_AppendTableEntry(work_unit, source.component, inpimp.component);
+                } else {
+                    printf("internal error: populate unknown input id %ld\n", id_id);
+                    return false;
+                }
             }
 
-            if( needs_spike ){
-                // LATER validate conditions one more time:
-                // pre-synaptic must have a spike output port
-                // post-synaptic must have a spike input
+        }
+        gettimeofday(&time_inps_end, NULL);
+        log(LOG_TIME) << "Created inputs in " << TimevalDeltaSec(time_inps_start, time_inps_end) << " sec." << LOG_ENDL;
+    }
 
-                auto AddDelay = [ &tabs ]( work_t work_unit, const auto &synimpl, Real delay ){
-                    if( work_unit < 0 ){
+    // also populate the synapses
+    // todo place the append syncomp lambda somewhere here LATER
+    {
+        log(LOG_INFO) << "Creating synapses..." << LOG_ENDL;
+        timeval time_syns_start, time_syns_end;
+        gettimeofday(&time_syns_start, NULL);
+        for (size_t proj_seq = 0; proj_seq < net.projections.contents.size(); proj_seq++) {
+
+            // printf("Projection %zd of %zd \n", proj_seq, net.projections.contents.size() );
+
+            const auto &proj = net.projections.contents.at(proj_seq);
+            const auto &prepop = net.populations.get(proj.presynapticPopulation);
+            const auto &postpop = net.populations.get(proj.postsynapticPopulation);
+
+            // get Cell type/Compartment instance. TODO remove.
+            const auto &presig = cell_sigs[prepop.component_cell];
+            const auto &postsig = cell_sigs[postpop.component_cell];
+
+            auto AppendSynapticComponentEntries = [
+                    &model, &prepop, &AppendSyncompInternals, &GetSynapseIdId,
+                    &GetCompartmentSynapseImplementations, &GetCompartmentSpikerImplementation, &GetCompartmentVoltageStatevarIndex,
+                    &engine_config
+#ifdef USE_MPI
+                    , &AppendRemoteDependency_Vpeer, &AppendRemoteDependency_Spike
+#endif
+            ](
+                    const SynapticComponent &syn, Int syncomp_seq, const Network::Projection::Connection &conn,
+                    const PointOnCellLocator &mine_loc,
+                    const PointOnCellLocator &peer_loc,
+                    work_t work_unit, const CellInternalSignature &sig, Int mine_cell_type_seq,
+                    work_t peer_work_unit, const CellInternalSignature &peer_sig, Int peer_cell_type_seq,
+                    RawTables &tabs
+            ) {
+                // TODO perhaps early exit if local work item is remote
+                // branch for whole cell or compartment LATER
+
+                Int id_id = GetSynapseIdId(syncomp_seq);
+
+                const bool needs_spike = syn.HasSpikeIn(model.component_types);
+                const bool needs_Vpeer = syn.HasVpeer(model.component_types);
+
+                // get weight value early on, just in case remote may need it ...?
+                Real weight = conn.weight;
+                if (!std::isfinite(weight)) weight = 1;
+
+                // get the underlying mechanism
+                // TODO might not exist, if this node doesn't work with this cell type
+                const auto &synimps = GetCompartmentSynapseImplementations(mine_loc);
+                if (!synimps.count(id_id)) {
+                    printf("Internal error: No impl signature for type %ld\n", id_id);
+                    printf("Synimps: ");
+                    for (auto keyval : synimps) printf("%ld ", keyval.first);
+                    printf("\n");
+                    return false;
+                }
+                const CellInternalSignature::SynapticComponentImplementation &synimpl = synimps.at(id_id);
+
+                // also add weight
+                auto AddWeight = [&tabs](work_t work_unit, const auto &synimpl, Real weight) {
+                    if (work_unit < 0) {
                         return true; // not on this node
                     }
                     const auto off_cf32 = tabs.global_table_const_f32_index[work_unit];
-                    auto      &tab_cf32 = tabs.global_tables_const_f32_arrays;
-                    const auto off_sf32 = tabs.global_table_state_f32_index[work_unit];
-                    auto      &tab_sf32 = tabs.global_tables_state_f32_arrays;
+                    auto &tab_cf32 = tabs.global_tables_const_f32_arrays;
 
-                    tab_cf32[ off_cf32 + synimpl.Table_Delay ].push_back(delay);
-                    tab_sf32[ off_sf32 + synimpl.Table_NextSpike ].push_back(-INFINITY);
-
+                    tab_cf32[off_cf32 + synimpl.Table_Weight].push_back(weight);
                     return true;
                 };
+                bool uses_weight = true; // might be elided LATER
+                if (uses_weight) AddWeight(work_unit, synimpl, weight);
 
-                // delay is common for all
-                bool uses_delay = true;
-                if( uses_delay ){
+                if (needs_Vpeer) {
 
-                    Real delay = conn.delay;
-                    if( !std::isfinite(conn.delay) ) delay = 0;
-
-                    AddDelay( work_unit, synimpl, delay );
-                }
-
-
-                auto AddChemPrePost = [
-                        &engine_config, &prepop, &GetCompartmentSpikerImplementation
+                    auto AddGap = [
+                            &GetCompartmentVoltageStatevarIndex,
+                            &engine_config
 #ifdef USE_MPI
-                        , &AppendRemoteDependency_Spike
+                            , &AppendRemoteDependency_Vpeer
 #endif
-                ](
-                        const SynapticComponent &syn,
-                        work_t post_work_unit, const CellInternalSignature::SynapticComponentImplementation &post_synimpl,
-                        work_t pre_work_unit,const CellInternalSignature &pre_sig, Int pre_cell_type_seq,
-                        const PointOnCellLocator &pre_loc,
-                        auto &tabs
-                ){
+                    ](
+                            const SynapticComponent &syn,
+                            work_t work_unit, const CellInternalSignature::SynapticComponentImplementation &synimpl, //const CellInternalSignature &sig, Int seg_seq,
+                            work_t peer_work_unit, const CellInternalSignature &peer_sig, Int peer_cell_type_seq,
+                            const PointOnCellLocator &peer_loc,
+                            auto &tabs
+                    ) {
 
-                    if( post_work_unit < 0 ){
-                        return true; // not mine, let it be resolved on spike-receiver demands later on
-                    }
+                        if (work_unit < 0) {
+                            return true; // not mine, let the need to send emerge
+                        }
 
-                    // and now add the entries to the post syn table
-                    auto AddPost = [ ]( auto &tabs, work_t work_unit, const auto &synimpl){
 
-                        const auto off_si64 = tabs.global_table_state_i64_index[work_unit];
-                        auto &tab_si64 = tabs.global_tables_state_i64_arrays;
+                        const auto off_ci64 = tabs.global_table_const_i64_index[work_unit];
+                        auto &tab_ci64 = tabs.global_tables_const_i64_arrays;
 
-                        RawTables::Table_I64 &Trig  = tab_si64.at(off_si64 + synimpl.Table_Trig );
-                        Trig.push_back(0); // perhaps compress trigger table LATER
+                        auto glob_tab_Vpeer = off_ci64 + synimpl.Table_Vpeer;
+
+                        RawTables::Table_I64 &Vpeer = tab_ci64.at(glob_tab_Vpeer);
+
+                        // if it exists on this node
+#if USE_MPI
+                        if (engine_config.use_mpi) {
+                            if (peer_work_unit < 0) {
+
+                                int node_peer = ~(peer_work_unit);
+                                // get the value from remote peer
+                                if (!AppendRemoteDependency_Vpeer(peer_loc, node_peer, glob_tab_Vpeer)) return false;
+                                return true;
+                            }
+                        }
+#endif
+                        // otherwise it's local
+                        ptrdiff_t local_idx_V_peer = GetCompartmentVoltageStatevarIndex(peer_sig, peer_cell_type_seq, peer_loc.segment, peer_loc.fractionAlong);
+
+                        if (local_idx_V_peer < 0) {
+                            printf("internal error: gap junction realization: Cell type %ld has no Vpeer\n", peer_cell_type_seq);
+                            return false;
+                        }
+
+                        // get reference to where peer's voltage is located
+                        ptrdiff_t global_idx_V_peer = tabs.global_state_f32_index[peer_work_unit] + local_idx_V_peer;
+                        auto global_tabentry = GetEncodedTableEntryId(tabs.global_state_tabref, global_idx_V_peer);
+
+                        Vpeer.push_back(global_tabentry);
 
                         return true;
                     };
 
-                    //post has trig buf, gives idx to sender
+                    if (!AddGap(syn, work_unit, synimpl, peer_work_unit, peer_sig, peer_cell_type_seq, peer_loc, tabs)) return false;
+                }
 
-                    // and where the spike target is located in each post-synaptic work item
+                if (needs_spike) {
+                    // LATER validate conditions one more time:
+                    // pre-synaptic must have a spike output port
+                    // post-synaptic must have a spike input
 
-                    //TODO change for split cell? just find the compartment responsible
+                    auto AddDelay = [&tabs](work_t work_unit, const auto &synimpl, Real delay) {
+                        if (work_unit < 0) {
+                            return true; // not on this node
+                        }
+                        const auto off_cf32 = tabs.global_table_const_f32_index[work_unit];
+                        auto &tab_cf32 = tabs.global_tables_const_f32_arrays;
+                        const auto off_sf32 = tabs.global_table_state_f32_index[work_unit];
+                        auto &tab_sf32 = tabs.global_tables_state_f32_arrays;
 
-                    long long global_idx_T_dest_table = tabs.global_table_state_i64_index[post_work_unit] + post_synimpl.Table_Trig;
-                    // printf("yyyyyy %lld %lld %lld\n\n\n", post_work_unit, tabs.global_table_state_i64_index[post_work_unit], global_idx_T_dest_table );
-                    long long entry_idx_T_dest = tabs.global_tables_state_i64_arrays[global_idx_T_dest_table].size(); // TODO change to reflect when handling mask, perhaps encapsulate
-                    auto packed_id = GetEncodedTableEntryId( global_idx_T_dest_table, entry_idx_T_dest );
+                        tab_cf32[off_cf32 + synimpl.Table_Delay].push_back(delay);
+                        tab_sf32[off_sf32 + synimpl.Table_NextSpike].push_back(-INFINITY);
 
-                    if( !AddPost( tabs, post_work_unit, post_synimpl) ) return false;
+                        return true;
+                    };
+
+                    // delay is common for all
+                    bool uses_delay = true;
+                    if (uses_delay) {
+
+                        Real delay = conn.delay;
+                        if (!std::isfinite(conn.delay)) delay = 0;
+
+                        AddDelay(work_unit, synimpl, delay);
+                    }
+
+
+                    auto AddChemPrePost = [
+                            &engine_config, &prepop, &GetCompartmentSpikerImplementation
+#ifdef USE_MPI
+                            , &AppendRemoteDependency_Spike
+#endif
+                    ](
+                            const SynapticComponent &syn,
+                            work_t post_work_unit, const CellInternalSignature::SynapticComponentImplementation &post_synimpl,
+                            work_t pre_work_unit, const CellInternalSignature &pre_sig, Int pre_cell_type_seq,
+                            const PointOnCellLocator &pre_loc,
+                            auto &tabs
+                    ) {
+
+                        if (post_work_unit < 0) {
+                            return true; // not mine, let it be resolved on spike-receiver demands later on
+                        }
+
+                        // and now add the entries to the post syn table
+                        auto AddPost = [](auto &tabs, work_t work_unit, const auto &synimpl) {
+
+                            const auto off_si64 = tabs.global_table_state_i64_index[work_unit];
+                            auto &tab_si64 = tabs.global_tables_state_i64_arrays;
+
+                            RawTables::Table_I64 &Trig = tab_si64.at(off_si64 + synimpl.Table_Trig);
+                            Trig.push_back(0); // perhaps compress trigger table LATER
+
+                            return true;
+                        };
+
+                        //post has trig buf, gives idx to sender
+
+                        // and where the spike target is located in each post-synaptic work item
+
+                        //TODO change for split cell? just find the compartment responsible
+
+                        long long global_idx_T_dest_table = tabs.global_table_state_i64_index[post_work_unit] + post_synimpl.Table_Trig;
+                        // printf("yyyyyy %lld %lld %lld\n\n\n", post_work_unit, tabs.global_table_state_i64_index[post_work_unit], global_idx_T_dest_table );
+                        long long entry_idx_T_dest = tabs.global_tables_state_i64_arrays[global_idx_T_dest_table].size(); // TODO change to reflect when handling mask, perhaps encapsulate
+                        auto packed_id = GetEncodedTableEntryId(global_idx_T_dest_table, entry_idx_T_dest);
+
+                        if (!AddPost(tabs, post_work_unit, post_synimpl)) return false;
 
 #ifdef USE_MPI
-                    if (engine_config.use_mpi) {
-                        if( pre_work_unit < 0 ){
+                        if (engine_config.use_mpi) {
+                            if (pre_work_unit < 0) {
 
-                            // needs to ask for spike input from pre, and keep the map from packed received input to buf
-                            int node_pre = ~(pre_work_unit); // TODO refactor
-                            if( !AppendRemoteDependency_Spike( pre_loc, node_pre, packed_id ) ) return false;
-                            return true;
+                                // needs to ask for spike input from pre, and keep the map from packed received input to buf
+                                int node_pre = ~(pre_work_unit); // TODO refactor
+                                if (!AppendRemoteDependency_Spike(pre_loc, node_pre, packed_id)) return false;
+                                return true;
+                            }
                         }
-                    }
 #endif
-                    // local pre, needs idx from sender
+                        // local pre, needs idx from sender
 
-                    // XXX do this for emergent remote ones too
+                        // XXX do this for emergent remote ones too
 
-                    // Spike output is required to exist on pre compartment
-                    const auto &preimp = GetCompartmentSpikerImplementation( pre_sig, pre_cell_type_seq, pre_loc.segment, pre_loc.fractionAlong );
-                    if( preimp.Table_SpikeRecipients < 0 ){
-                        printf("Internal error: No spike send for celltype %ld seg %ld %zd\n", prepop.component_cell, pre_loc.segment, preimp.Table_SpikeRecipients);
-                        return false;
-                    }
+                        // Spike output is required to exist on pre compartment
+                        const auto &preimp = GetCompartmentSpikerImplementation(pre_sig, pre_cell_type_seq, pre_loc.segment, pre_loc.fractionAlong);
+                        if (preimp.Table_SpikeRecipients < 0) {
+                            printf("Internal error: No spike send for celltype %ld seg %ld %zd\n", prepop.component_cell, pre_loc.segment, preimp.Table_SpikeRecipients);
+                            return false;
+                        }
 
-                    RawTables::Table_I64 &Spike_recipients = tabs.global_tables_const_i64_arrays.at(tabs.global_table_const_i64_index.at(pre_work_unit) + preimp.Table_SpikeRecipients);
+                        RawTables::Table_I64 &Spike_recipients = tabs.global_tables_const_i64_arrays.at(tabs.global_table_const_i64_index.at(pre_work_unit) + preimp.Table_SpikeRecipients);
 
-                    Spike_recipients.push_back(packed_id);
+                        Spike_recipients.push_back(packed_id);
 
-                    return true;
+                        return true;
+                    };
+
+                    if (!AddChemPrePost(syn, work_unit, synimpl, peer_work_unit, peer_sig, peer_cell_type_seq, peer_loc, tabs)) return false;
                 };
 
-                if( !AddChemPrePost(syn, work_unit, synimpl, peer_work_unit, peer_sig, peer_cell_type_seq, peer_loc, tabs) ) return false;
+                if (work_unit >= 0) {
+                    // and join them, implementing internal mech. just once
+                    if (!AppendSyncompInternals(syn, id_id, work_unit, synimpl, tabs)) return false;
+                }
+
+
+                return true; // yay!
             };
 
-            if( work_unit >= 0 ){
-                // and join them, implementing internal mech. just once
-                if( !AppendSyncompInternals( syn, id_id, work_unit, synimpl, tabs ) ) return false;
-            }
+            for (size_t conn_seq = 0; conn_seq < proj.connections.contents.size(); conn_seq++) {
+                const auto &conn = proj.connections.contents[conn_seq];
 
+                // printf("Connection %zd of %zd \n", conn_seq, proj.connections.contents.size() ); fflush(stdout);
 
-            return true; // yay!
-        };
+                const PointOnCellLocator pre_loc = {proj.presynapticPopulation, conn.preCell, conn.preSegment, conn.preFractionAlong};
+                const PointOnCellLocator post_loc = {proj.postsynapticPopulation, conn.postCell, conn.postSegment, conn.postFractionAlong};
 
-        for(size_t conn_seq = 0; conn_seq < proj.connections.contents.size(); conn_seq++){
-            const auto &conn = proj.connections.contents[conn_seq];
-
-            // printf("Connection %zd of %zd \n", conn_seq, proj.connections.contents.size() ); fflush(stdout);
-
-            const PointOnCellLocator pre_loc  = { proj.presynapticPopulation , conn.preCell , conn.preSegment , conn.preFractionAlong  };
-            const PointOnCellLocator post_loc = { proj.postsynapticPopulation, conn.postCell, conn.postSegment, conn.postFractionAlong };
-
-            //get work unit from type/population/instance. TODO replace with something better, using work_unit only when applicable. (eg split cell)
-            work_t work_unit_pre;
-            work_t work_unit_post;
+                //get work unit from type/population/instance. TODO replace with something better, using work_unit only when applicable. (eg split cell)
+                work_t work_unit_pre;
+                work_t work_unit_post;
 #ifdef USE_MPI
-            if (engine_config.use_mpi) {
-                work_unit_pre  = WorkUnitOrNode( proj.presynapticPopulation , conn.preCell  );
-                work_unit_post = WorkUnitOrNode( proj.postsynapticPopulation, conn.postCell );
-            } else {
-                work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
-                work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
-            }
+                if (engine_config.use_mpi) {
+                    work_unit_pre = WorkUnitOrNode(proj.presynapticPopulation, conn.preCell);
+                    work_unit_post = WorkUnitOrNode(proj.postsynapticPopulation, conn.postCell);
+                } else {
+                    work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
+                    work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
+                }
 
 #else
-            work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
-            work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
+                work_unit_pre = workunit_per_cell_per_population[proj.presynapticPopulation][conn.preCell];
+                work_unit_post = workunit_per_cell_per_population[proj.postsynapticPopulation][conn.postCell];
 #endif
 
-            // printf("connnn %lx %ld\n", work_unit_pre, work_unit_post); fflush(stdout);
+                // printf("connnn %lx %ld\n", work_unit_pre, work_unit_post); fflush(stdout);
 
-            // now populate the synaptic components in the raw tables
-            if(conn.type == Network::Projection::Connection::SPIKING){
-                // TODO validate conditions:
-                // pre-synaptic must have a spike output port
-                // post-synaptic must have a spike input
+                // now populate the synaptic components in the raw tables
+                if (conn.type == Network::Projection::Connection::SPIKING) {
+                    // TODO validate conditions:
+                    // pre-synaptic must have a spike output port
+                    // post-synaptic must have a spike input
 
-                const SynapticComponent &syn = synaptic_components.get(conn.synapse);
+                    const SynapticComponent &syn = synaptic_components.get(conn.synapse);
 
-                if( !AppendSynapticComponentEntries(
-                        syn, conn.synapse, conn,
-                        post_loc, pre_loc,
-                        work_unit_post, postsig, postpop.component_cell,
-                        work_unit_pre , presig , prepop.component_cell ,
-                        tabs
-                ) ) return false;
+                    if (!AppendSynapticComponentEntries(
+                            syn, conn.synapse, conn,
+                            post_loc, pre_loc,
+                            work_unit_post, postsig, postpop.component_cell,
+                            work_unit_pre, presig, prepop.component_cell,
+                            tabs
+                    ))
+                        return false;
+                } else if (conn.type == Network::Projection::Connection::ELECTRICAL) {
+                    // same behaviour for pre-and post-synaptic
+                    // Vpeer is required, and it always exists for physical compartments
+
+                    const SynapticComponent &syn = synaptic_components.get(conn.synapse);
+
+                    if (!AppendSynapticComponentEntries(
+                            syn, conn.synapse, conn,
+                            post_loc, pre_loc,
+                            work_unit_post, postsig, postpop.component_cell,
+                            work_unit_pre, presig, prepop.component_cell,
+                            tabs
+                    ))
+                        return false;
+                    if (!AppendSynapticComponentEntries(
+                            syn, conn.synapse, conn,
+                            pre_loc, post_loc,
+                            work_unit_pre, presig, prepop.component_cell,
+                            work_unit_post, postsig, postpop.component_cell,
+                            tabs
+                    ))
+                        return false;
+                } else if (conn.type == Network::Projection::Connection::CONTINUOUS) {
+                    // anything goes, really
+                    const SynapticComponent &syn_pre = synaptic_components.get(conn.continuous.preComponent);
+                    const SynapticComponent &syn_post = synaptic_components.get(conn.continuous.postComponent);
+
+                    if (!AppendSynapticComponentEntries(
+                            syn_post, conn.continuous.postComponent, conn,
+                            post_loc, pre_loc,
+                            work_unit_post, postsig, postpop.component_cell,
+                            work_unit_pre, presig, prepop.component_cell,
+                            tabs
+                    ))
+                        return false;
+                    if (!AppendSynapticComponentEntries(
+                            syn_pre, conn.continuous.preComponent, conn,
+                            pre_loc, post_loc,
+                            work_unit_pre, presig, prepop.component_cell,
+                            work_unit_post, postsig, postpop.component_cell,
+                            tabs
+                    ))
+                        return false;
+                } else {
+                    printf("internal error: populate unknown synapse type projection %zd instance %zd\n", proj_seq, conn_seq);
+                    return false;
+                }
+                // printf("conndone %zd %zd\n", proj_seq, conn_seq); fflush(stdout);
             }
-            else if(conn.type == Network::Projection::Connection::ELECTRICAL){
-                // same behaviour for pre-and post-synaptic
-                // Vpeer is required, and it always exists for physical compartments
 
-                const SynapticComponent &syn = synaptic_components.get(conn.synapse);
-
-                if( !AppendSynapticComponentEntries(
-                        syn, conn.synapse, conn,
-                        post_loc, pre_loc,
-                        work_unit_post, postsig, postpop.component_cell,
-                        work_unit_pre , presig , prepop.component_cell ,
-                        tabs
-                ) ) return false;
-                if( !AppendSynapticComponentEntries(
-                        syn, conn.synapse, conn,
-                        pre_loc, post_loc,
-                        work_unit_pre , presig , prepop.component_cell ,
-                        work_unit_post, postsig, postpop.component_cell,
-                        tabs
-                ) ) return false;
-            }
-            else if(conn.type == Network::Projection::Connection::CONTINUOUS){
-                // anything goes, really
-                const SynapticComponent &syn_pre  = synaptic_components.get(conn.continuous.preComponent );
-                const SynapticComponent &syn_post = synaptic_components.get(conn.continuous.postComponent);
-
-                if( !AppendSynapticComponentEntries(
-                        syn_post, conn.continuous.postComponent, conn,
-                        post_loc, pre_loc,
-                        work_unit_post, postsig, postpop.component_cell,
-                        work_unit_pre , presig , prepop.component_cell ,
-                        tabs
-                ) ) return false;
-                if( !AppendSynapticComponentEntries(
-                        syn_pre , conn.continuous.preComponent , conn,
-                        pre_loc, post_loc,
-                        work_unit_pre , presig , prepop.component_cell ,
-                        work_unit_post, postsig, postpop.component_cell,
-                        tabs
-                ) ) return false;
-            }
-            else{
-                printf("internal error: populate unknown synapse type projection %zd instance %zd\n", proj_seq, conn_seq);
-                return false;
-            }
-            // printf("conndone %zd %zd\n", proj_seq, conn_seq); fflush(stdout);
         }
-
+        gettimeofday(&time_syns_end, NULL);
+        log(LOG_TIME) << "Created synapses in " << TimevalDeltaSec(time_syns_start, time_syns_end) <<" sec." << LOG_ENDL;
     }
 
-    gettimeofday(&time_syns_end, NULL);
-    printf("Created synapses in %.4lf sec.\n",TimevalDeltaSec(time_syns_start, time_syns_end));
-
-    printf("Creating data outputs...\n");
-
-    // add the loggers
-
+    //-----> Add the loggers
     // TODO explicit capture
-    auto Implement_LoggerColumn = [ & ]( const Int daw_seq, const Int col_seq, const std::string &output_filepath,const auto &path, EngineConfig::TrajectoryLogger::LogColumn &column ){
+    log(LOG_INFO) << "Creating data outputs..." << LOG_ENDL;
+    auto Implement_LoggerColumn = [&](const Int daw_seq, const Int col_seq, const std::string &output_filepath, const auto &path, EngineConfig::TrajectoryLogger::LogColumn &column) {
 
         // TODO determine if segment-based, and expose compimpl, here
-        if( path.RefersToCell() ){
+        if (path.RefersToCell()) {
 
             const auto &pop = net.populations.get(path.population);
             const auto &cell_type = cell_types.get(pop.component_cell);
@@ -6552,16 +6639,16 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
             work_t work_unit_seg;
 #ifdef USE_MPI
             if (engine_config.use_mpi) {
-                work_unit_seg = WorkUnitOrNode( path.population, path.cell_instance );
+                work_unit_seg = WorkUnitOrNode(path.population, path.cell_instance);
 
-                if( work_unit_seg < 0 ){
-                    #ifdef MPI
+                if (work_unit_seg < 0) {
+#ifdef MPI
                     assert(engine_config.my_mpi.rank == 0 );
-                    #endif
+#endif
 
                     int remote_node = ~(work_unit_seg);
                     column.on_node = remote_node;
-                    if( !AppendRemoteDependency_DataWriter( {daw_seq, col_seq}, remote_node ) ) return false;
+                    if (!AppendRemoteDependency_DataWriter({daw_seq, col_seq}, remote_node)) return false;
 
                     return true;
                 }
@@ -6574,32 +6661,31 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 #endif
 
 
-
             const auto &sig = cell_sigs[pop.component_cell];
 
             // commonly used paths (evidence mounts to use parent class form commonish things like inputs and synapses)
 
             // otherwise cell-type-specific paths
 
-            auto MustBePhysicalCell = [ &col_seq, &output_filepath ]( const CellType &cell_type ){
-                if( cell_type.type != CellType::PHYSICAL ){
+            auto MustBePhysicalCell = [&col_seq, &output_filepath](const CellType &cell_type) {
+                if (cell_type.type != CellType::PHYSICAL) {
                     printf("internal error: column %ld for data writer %s has channel path on non-physical cell\n", col_seq, output_filepath.c_str());
                     return false;
                 }
                 return true;
             };
-            auto MustBeArtificialCell = [ &col_seq, &output_filepath ]( const CellType &cell_type ){
-                if( cell_type.type != CellType::ARTIFICIAL ){
+            auto MustBeArtificialCell = [&col_seq, &output_filepath](const CellType &cell_type) {
+                if (cell_type.type != CellType::ARTIFICIAL) {
                     printf("internal error: column %ld for data writer %s has cell path on non-artificial cell\n", col_seq, output_filepath.c_str());
                     return false;
                 }
                 return true;
             };
 
-            switch(path.type){
+            switch (path.type) {
                 case Simulation::LemsQuantityPath::Type::SEGMENT: {
 
-                    if( !MustBePhysicalCell( cell_type ) ) return false;
+                    if (!MustBePhysicalCell(cell_type)) return false;
 
                     const PhysicalCell &cell = cell_type.physical;
                     // const Morphology &morph = morphologies.get(cell.morphology);
@@ -6607,11 +6693,11 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                     auto &pig = sig.physical_cell;
 
-                    switch(path.segment.type){
+                    switch (path.segment.type) {
 
                         case Simulation::LemsQuantityPath::SegmentPath::Type::VOLTAGE: {
                             // printf("daw volt cell %ld seq %ld\n", (Int)path.cell_instance, (Int)path.segment_seq );
-                            const ScaleEntry volts = {"V" ,  0, 1.0};
+                            const ScaleEntry volts = {"V", 0, 1.0};
                             column.type = EngineConfig::TrajectoryLogger::LogColumn::Type::TOPLEVEL_STATE;
                             column.value_type = EngineConfig::TrajectoryLogger::LogColumn::ValueType::F32;
 
@@ -6623,9 +6709,8 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                             break;
                         }
                         case Simulation::LemsQuantityPath::SegmentPath::Type::CALCIUM_INTRA:
-                        case Simulation::LemsQuantityPath::SegmentPath::Type::CALCIUM2_INTRA:
-                        {
-                            const ScaleEntry millimolar = {"mM" ,  0, 1.0};
+                        case Simulation::LemsQuantityPath::SegmentPath::Type::CALCIUM2_INTRA: {
+                            const ScaleEntry millimolar = {"mM", 0, 1.0};
                             column.type = EngineConfig::TrajectoryLogger::LogColumn::Type::TOPLEVEL_STATE;
                             column.value_type = EngineConfig::TrajectoryLogger::LogColumn::ValueType::F32;
 
@@ -6634,20 +6719,20 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                             Int Ca_seq = bioph.Ca_species_seq;
                             const char *sCalcium = "calcium";
-                            if( path.segment.type == Simulation::LemsQuantityPath::SegmentPath::Type::CALCIUM2_INTRA ){
+                            if (path.segment.type == Simulation::LemsQuantityPath::SegmentPath::Type::CALCIUM2_INTRA) {
                                 Ca_seq = bioph.Ca2_species_seq;
                                 sCalcium = "calcium2";
                             }
 
-                            if( Ca_seq < 0 ){
+                            if (Ca_seq < 0) {
                                 printf("internal error: logged biophysics missing %s", sCalcium);
                                 return false;
                             }
-                            if( !comp_impl.concentration.count(Ca_seq) ){
+                            if (!comp_impl.concentration.count(Ca_seq)) {
                                 printf("internal error: logged biophysics missing %s impl", sCalcium);
                                 return false;
                             }
-                            if( !comp_def.ions.count(Ca_seq) ){
+                            if (!comp_def.ions.count(Ca_seq)) {
                                 printf("internal error: logged biophysics missing %s def", sCalcium);
                                 return false;
                             }
@@ -6657,33 +6742,32 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                             const auto &calcconc = conc_models.get(calcinst.conc_model_seq);
 
                             ptrdiff_t Index_CaConcIn = calcimpl.Index_Intra;
-                            if( calcconc.type == ConcentrationModel::COMPONENT ){
+                            if (calcconc.type == ConcentrationModel::COMPONENT) {
                                 // get it from LEMS component
 
                                 Int comp_type_seq = calcconc.component.id_seq;
-                                if( comp_type_seq < 0 ){
+                                if (comp_type_seq < 0) {
                                     printf("internal error: lems quantity path for %s: missing component type\n", sCalcium);
                                     return false;
                                 }
                                 const ComponentType &comp_type = component_types.get(comp_type_seq);
 
                                 const auto exposure_seq = comp_type.common_exposures.concentration_intra;
-                                if( exposure_seq < 0 ){
+                                if (exposure_seq < 0) {
                                     printf("internal error: lems quantity path for %s: missing component exposure %d\n", sCalcium, (int) exposure_seq);
                                     return false;
                                 }
                                 const auto &exposure = comp_type.exposures.get(exposure_seq);
 
-                                if( exposure.type == ComponentType::Exposure::STATE ){
-                                    Index_CaConcIn = calcimpl.component.statevars_to_states[ exposure.seq ].index;
-                                }
-                                else{
-                                    printf("error: lems quantity path for %s is not a state variable; this is not supported yet\n", sCalcium );
+                                if (exposure.type == ComponentType::Exposure::STATE) {
+                                    Index_CaConcIn = calcimpl.component.statevars_to_states[exposure.seq].index;
+                                } else {
+                                    printf("error: lems quantity path for %s is not a state variable; this is not supported yet\n", sCalcium);
                                     return false; // perhaps fix LATER
                                 }
                             }
 
-                            if( Index_CaConcIn < 0 ){
+                            if (Index_CaConcIn < 0) {
                                 printf("internal error: logged biophysics missing %s impl idx", sCalcium);
                                 return false;
                             }
@@ -6706,10 +6790,10 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
                 case Simulation::LemsQuantityPath::Type::CHANNEL: {
 
-                    if( !MustBePhysicalCell( cell_type ) ) return false;
+                    if (!MustBePhysicalCell(cell_type)) return false;
                     auto &pig = sig.physical_cell;
 
-                    switch(path.channel.type){
+                    switch (path.channel.type) {
 
                         case Simulation::LemsQuantityPath::ChannelPath::Type::Q: {
 
@@ -6720,7 +6804,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                             auto seg_seq = path.segment_seq;
                             const auto &comp_impl = pig.seg_implementations[seg_seq];
                             size_t sig_Q_offset = comp_impl.channel[path.channel.distribution_seq].per_gate[path.channel.gate_seq].Index_Q;
-                            if(sig_Q_offset < 0){
+                            if (sig_Q_offset < 0) {
                                 // TODO check for complex gates
                                 printf("column %ld for ion channel-located composite Q data writer %s not supported yet \n", col_seq, output_filepath.c_str());
                                 return false;
@@ -6741,21 +6825,21 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     break;
                 }
 
-                case Simulation::LemsQuantityPath::Type::SYNAPSE:{
+                case Simulation::LemsQuantityPath::Type::SYNAPSE: {
                     printf("column %ld for data writer %s not supported yet : synapse path\n", col_seq, output_filepath.c_str());
                     return false;
                 }
-                case Simulation::LemsQuantityPath::Type::INPUT:{
+                case Simulation::LemsQuantityPath::Type::INPUT: {
                     printf("column %ld for data writer %s not supported yet : input path\n", col_seq, output_filepath.c_str());
                     return false;
                 }
-                case Simulation::LemsQuantityPath::Type::CELL:{
+                case Simulation::LemsQuantityPath::Type::CELL: {
 
-                    if( !MustBeArtificialCell( cell_type ) ) return false;
+                    if (!MustBeArtificialCell(cell_type)) return false;
                     auto &aig = sig.artificial_cell;
 
                     Int comp_type_seq = cell_type.artificial.component.id_seq;
-                    if( comp_type_seq < 0 ){
+                    if (comp_type_seq < 0) {
                         printf("internal error: lems quantity path for artificial cell: none native\n");
                         return false;
                     }
@@ -6765,10 +6849,9 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     const auto refer_thing = comp_type.name_space.get(namespace_thing_seq);
 
                     ptrdiff_t Index_Statevar = -1;
-                    if( refer_thing.type == ComponentType::NamespaceThing::STATE ){
-                        Index_Statevar = aig.component.statevars_to_states[ refer_thing.seq ].index;
-                    }
-                    else{
+                    if (refer_thing.type == ComponentType::NamespaceThing::STATE) {
+                        Index_Statevar = aig.component.statevars_to_states[refer_thing.seq].index;
+                    } else {
                         printf("error: lems quantity path for artificial cell is not a state variable; this is not supported yet\n");
                         return false; // perhaps fix LATER
                     }
@@ -6785,7 +6868,7 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     const LemsUnit native = dimensions.GetNative(dim);
                     // const LemsUnit desired = native;
                     // use SI units for now
-                    const ScaleEntry si = {"SI units" ,  0, 1.0};
+                    const ScaleEntry si = {"SI units", 0, 1.0};
                     const LemsUnit desired = si;
 
                     column.scaleFactor = native.ConvertTo(1, desired);
@@ -6799,37 +6882,24 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
                     return false;
                 }
             }
-        }
-        else{
+        } else {
             printf("column %ld for data writer %s not supported yet : non-cell-based path type %d \n", col_seq, output_filepath.c_str(), path.type);
             return false;
         }
 
         return true;
     };
-
-
     bool i_log_the_data = true;
-
-#ifdef USE_MPI
     if (engine_config.use_mpi) {
-        if(engine_config.my_mpi.rank == 0 ){
-
+        if (engine_config.my_mpi.rank == 0) {// form the data structures, send requests for whatever is remote
             i_log_the_data = true;
-            // form the data structures, send requests for whatever is remote
-
-        }
-        else{
+        } else { // wait for remote requests from logger node to emerge
             i_log_the_data = false;
-            // wait for remote requests from logger node to emerge
         }
     }
-#endif
-
-    if( i_log_the_data ){
-
-        engine_config.trajectory_loggers.resize( sim.data_writers.contents.size() );
-        for( Int daw_seq = 0; daw_seq < (Int)sim.data_writers.contents.size(); daw_seq++ ){
+    if (i_log_the_data) { //FIXME add event writers
+        engine_config.trajectory_loggers.resize(sim.data_writers.contents.size());
+        for (Int daw_seq = 0; daw_seq < (Int) sim.data_writers.contents.size(); daw_seq++) {
 
             auto &daw = sim.data_writers.get(daw_seq);
 
@@ -6837,680 +6907,675 @@ bool GenerateModel(const Model &model, const SimulatorConfig &config, EngineConf
 
             logger.logfile_path = daw.fileName;
 
-            for( Int col_seq = 0; col_seq < (Int)daw.output_columns.contents.size(); col_seq++ ){
+            for (Int col_seq = 0; col_seq < (Int) daw.output_columns.contents.size(); col_seq++) {
 
                 const auto &col = daw.output_columns.get(col_seq);
                 const auto &path = col.quantity;
 
                 EngineConfig::TrajectoryLogger::LogColumn column;
 
-                if( !Implement_LoggerColumn( daw_seq, col_seq, daw.fileName, path, column ) ) return false;
+                if (!Implement_LoggerColumn(daw_seq, col_seq, daw.fileName, path, column)) return false;
 
                 logger.columns.push_back(column);
             }
 
         }
     }
-    //FIXME add event writers
 
+//    MPI stuff
+    {
 #ifdef USE_MPI
-    // I send recvlists to nodes, for them to send to me
-    std::map< int, std::vector<char> > recvlists_encoded;
+        // I send recvlists to nodes, for them to send to me
+        std::map<int, std::vector<char> > recvlists_encoded;
 
-    // Nodes send recvlists to nodes, for me to send to them
-    std::map< int, std::vector<char> > sendlists_encoded;
+        // Nodes send recvlists to nodes, for me to send to them
+        std::map<int, std::vector<char> > sendlists_encoded;
 
-    if (engine_config.use_mpi) {
-        printf("Determining recvlists...\n"); fflush(stdout);
-        // Now, each node informs the others on what information streams it needs, in a symbolic(NeuroML-based) format
-        if( config.debug_netcode ){
-        Say("Recv");
-        for( const auto &keyval : recv_lists ){
-            Say("from node %d:", keyval.first);
+        if (engine_config.use_mpi) {
 
-            const auto &recv_list = keyval.second;
-            for( const auto &keyval : recv_list.vpeer_refs ){
-                const PointOnCellLocator &loc = keyval.first;
-                std::string say_refs = "\tVpeer " + loc.toPresentableString() + " to remap refs: ";
+            printf("Determining recvlists...\n");
+            fflush(stdout);
+            // Now, each node informs the others on what information streams it needs, in a symbolic(NeuroML-based) format
+            if (config.debug_netcode) {
+                Say("Recv");
+                for (const auto &keyval : recv_lists) {
+                    Say("from node %d:", keyval.first);
 
-                for( TabEntryRef_Packed ref : keyval.second ){
-                    say_refs += presentable_string(ref) + " ";
+                    const auto &recv_list = keyval.second;
+                    for (const auto &keyval : recv_list.vpeer_refs) {
+                        const PointOnCellLocator &loc = keyval.first;
+                        std::string say_refs = "\tVpeer " + loc.toPresentableString() + " to remap refs: ";
+
+                        for (TabEntryRef_Packed ref : keyval.second) {
+                            say_refs += presentable_string(ref) + " ";
+                        }
+                        Say("%s", say_refs.c_str());
+                    }
+
+                    for (const auto &keyval : recv_list.spike_refs) {
+                        const PointOnCellLocator &loc = keyval.first;
+                        std::string say_refs = "\tSpikes " + loc.toPresentableString() + " to trigger refs: ";
+
+                        for (TabEntryRef_Packed ref : keyval.second) {
+                            say_refs += presentable_string(ref) + " ";
+                        }
+                        Say("%s", say_refs.c_str());
+                    }
+
+                    for (const auto &daw : recv_list.daw_refs) {
+                        std::string say_refs = "\tDaw " + daw.toPresentableString() + " to log ";
+
+                        Say("%s", say_refs.c_str());
+                    }
                 }
-                Say("%s", say_refs.c_str());
             }
 
-            for( const auto &keyval : recv_list.spike_refs ){
-                const PointOnCellLocator &loc = keyval.first;
-                std::string say_refs = "\tSpikes " + loc.toPresentableString() + " to trigger refs: ";
 
-                for( TabEntryRef_Packed ref : keyval.second ){
-                    say_refs += presentable_string(ref) + " ";
-                }
-                Say("%s", say_refs.c_str());
-            }
+            printf("Exchanging recvlists...\n");
+            fflush(stdout);
 
-            for( const auto &daw : recv_list.daw_refs ){
-                std::string say_refs = "\tDaw " + daw.toPresentableString() + " to log ";
-
-                Say("%s", say_refs.c_str());
-            }
-        }
-        }
-
-        printf("Exchanging recvlists...\n"); fflush(stdout);
-
-        // encode the recvlists for transmission
-        for( const auto &keyval : recv_lists ){
-            int other_rank = keyval.first;
-            const RecvList &recvlist = keyval.second;
-            std::string enc;
-            // first, the header oine
-            enc += accurate_string( recvlist.vpeer_refs.size() ) + " "
-                +  accurate_string( recvlist.daw_refs  .size() ) + " "
-                +  accurate_string( recvlist.spike_refs.size() ) + "\n" ;
-
-            for( const auto &keyval : recvlist.vpeer_refs ){
-                const auto &loc = keyval.first;
-                loc.toEncodedString( enc );
-                enc += "\n";
-            }
-            for( const DawRef &daw_ref : recvlist.daw_refs ){
-                daw_ref.toEncodedString( enc );
-                enc += "\n";
-            }
-            for( const auto &keyval : recvlist.spike_refs ){
-                const auto &loc = keyval.first;
-                loc.toEncodedString( enc );
-                enc += "\n";
-            }
-
-            auto &recvlist_encoded = recvlists_encoded[other_rank];
-            AppendToVector( recvlist_encoded, enc );
-            recvlist_encoded.push_back('\0');
-        }
-
-        // dbg output encoded
-        if( config.debug_netcode ){
-            Say("Send Recvlist");
-            for( const auto &keyval : recvlists_encoded ){
+            // encode the recvlists for transmission
+            for (const auto &keyval : recv_lists) {
                 int other_rank = keyval.first;
-                const auto &recvlist_encoded = keyval.second;
+                const RecvList &recvlist = keyval.second;
+                std::string enc;
+                // first, the header oine
+                enc += accurate_string(recvlist.vpeer_refs.size()) + " "
+                       + accurate_string(recvlist.daw_refs.size()) + " "
+                       + accurate_string(recvlist.spike_refs.size()) + "\n";
 
-                Say("to node %d, %s", other_rank, recvlist_encoded.data());
-            }
-        }
-    }
-    // very much like Alltoallv, but communications are made with only existing connections (not the whole cartesian product)
-    // this should really shine in large amounts of nodes (hundreds? or even tens?)
-    // MPI_Graph_Neighbor* is similar, but it does not allow for automatic discovery of comm-adjacent nodes
-    auto ExchangeLists = [  ]( const MPI_Datatype &datatype, const auto &sent_vectors_hashmap, auto & received_vectors_hashmap ){
-
-        // skip, let them communicate
-
-        const int TAG_LIST_SIZE = 1;
-        const int TAG_LIST_LIST = 0;
-        const int TAG_LIST_RECEIVED = 3;
-
-        const bool use_Ssend = false; // for the msg list, so confiramtion comes through MPI itself
-
-        // the steps are as following:
-        // each node sends send lists to the nodes it receives from
-        // and sets a "any" message sink to receive such lists from any receiver node it has to send to
-        // the message sink is also used to receive confirmation of the send lists having been received !
-        //     this is important so that all send lists are sure to not be in the air, when listening stops
-        // the process is completed by running a poll on whether all nodes have received confirmation that their send lists were accepted
-
-        // an ordered sequence of the nodes I send recvlists to
-        std::vector<int> send_seq_to_node;
-        for( auto keyval : sent_vectors_hashmap ){
-            send_seq_to_node.push_back(keyval.first);
-        }
-        int nSends = (int)send_seq_to_node.size();
-
-        const int SEND_CODE_SUCCESS = 12345678;
-
-        std::vector< MPI_Request > own_req_list;
-        // Net receiver sends its recvlists to the nodes responsible to send the data
-
-        // sends the sizes first (or more general headers, could be useful for indirect discovery too ?)
-        int req_send_list_size_offset = own_req_list.size();
-        own_req_list.insert( own_req_list.end(), nSends, MPI_REQUEST_NULL );
-
-        // may send the lists too, or send them after connections are established (through list size headers)
-        int req_send_list_offset = own_req_list.size();
-        own_req_list.insert( own_req_list.end(), nSends, MPI_REQUEST_NULL );
-
-        // and may get a confirmation from sender (or use Ssend to do this instead)
-        int req_recv_list_confirm_offset = own_req_list.size();
-        own_req_list.insert( own_req_list.end(), nSends, MPI_REQUEST_NULL );
-
-        // These keep track of what the data receiver needs to send, and which sends are done
-        std::vector<int> list_send_sizes(nSends,-1);
-        std::vector<int> recvlist_replies(nSends,-1);
-        std::vector<bool> recvlist_replies_received( nSends, false );
-        // keep a handy count of recvlist_replies_received
-        int waiting_responses = 0;
-        int waiting_responses_buffer = INT_MAX; // plus temp.storage for async polling
-
-
-        // All nodes participate in the poll, to know when the connection discovery process is done
-        int req_poll_offset = own_req_list.size();
-        own_req_list.push_back( MPI_REQUEST_NULL );
-
-
-        // Potential net sender needs to accept inbound messages from any other node
-        int req_recv_list_size_offset = own_req_list.size();
-        own_req_list.push_back( MPI_REQUEST_NULL );
-        int recv_list_size_buffer = -1;
-
-        // and has to track a dynamic, unknown number of inbound connections for the unknown-sized lists
-        std::set<int> receiving_recvlist_from;
-
-        std::map< int, MPI_Request > emergent_req_send_confirm;
-        std::map< int, MPI_Request > emergent_req_recv_list; // for all messages, due to unknown size
-        std::map< int, int > emergent_recv_list_size; // for all messages, due to unknown size
-
-
-        // for Waitsome/Testsome
-        std::vector< MPI_Status > status_buf;
-        std::vector< int > status_buf_idx;
-
-        // First, emit all messages
-
-        // what if comm buffer is full? MPI runtime should then not put more messages, just keep them pending
-        for( int i_recv = 0; i_recv < nSends; i_recv++ ){
-
-            auto other_rank = send_seq_to_node[i_recv];
-            const auto &sent_list = sent_vectors_hashmap.at(other_rank);
-
-            if( sent_list.empty() ) continue;
-
-            list_send_sizes[i_recv] = sent_list.size();
-
-            // Sends to the same outbound node are alwyas ordered
-            // send size msg first
-
-            MPI_Isend( &list_send_sizes[i_recv], 1, MPI_INT, other_rank, TAG_LIST_SIZE, MPI_COMM_WORLD, &own_req_list[ req_send_list_size_offset + i_recv]);
-
-            if(use_Ssend){
-                // don't need to recv a confirmation message
-                MPI_Issend( sent_list.data(), sent_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &own_req_list[ req_send_list_offset + i_recv]);
-            }
-            else{
-                // recv a notifiation that the recvlist has been received
-                MPI_Isend( sent_list.data(), sent_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &own_req_list[ req_send_list_offset + i_recv]);
-
-                MPI_Irecv( &recvlist_replies[i_recv], 1, MPI_INT, other_rank, TAG_LIST_RECEIVED, MPI_COMM_WORLD, &own_req_list[ req_recv_list_confirm_offset + i_recv]);
-            }
-
-            waiting_responses++;
-        }
-
-        auto Setup_Irecv_ListSize = [ & ]( ){
-            MPI_Irecv( &recv_list_size_buffer, 1, MPI_INT, MPI_ANY_SOURCE, TAG_LIST_SIZE, MPI_COMM_WORLD, &own_req_list[ req_recv_list_size_offset ]);
-        };
-        Setup_Irecv_ListSize();
-
-        // and get a random recv list too, for lists I should send to
-        // MPI_Message probe_list_msg; // one for probe
-        // int probe_ready;
-
-        // Now, wait for incoming messages
-
-        typedef std::chrono::high_resolution_clock::time_point Time;
-        typedef std::chrono::duration<double> TimeDiff_Sec;
-        Time tStart = std::chrono::high_resolution_clock::now();
-
-        Time tLastPoll = tStart;
-        auto getSecs = [  ]( Time tEnd, Time tstart ){
-            return std::chrono::duration_cast< TimeDiff_Sec >(tEnd - tstart).count();
-        };
-
-        const double POLL_PERIOD_SEC = 0.1; // TODO make dynamic
-
-        bool done = false;
-        bool waiting_poll = false;
-        int poll_result = -1;
-        int poll_serial_no = 0;
-
-        Say("Reqs %d %d %d %d %d %d", (int)own_req_list.size(), req_send_list_offset, req_send_list_size_offset, req_poll_offset, req_recv_list_confirm_offset, req_recv_list_size_offset);
-
-
-        while( !done ){
-
-            // don't log this when spinning
-            // Say("Event loop start");
-
-            Time tNow = std::chrono::high_resolution_clock::now();
-
-            // NB: should spin anyway, because this is a time driven event -- not impossible for all communications to complete
-            if( getSecs( tNow, tLastPoll ) > POLL_PERIOD_SEC && !waiting_poll ){
-                // start async poll
-                Say("Start poll %d", poll_serial_no);
-                waiting_responses_buffer = waiting_responses;
-                MPI_Iallreduce( &waiting_responses_buffer, &poll_result, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, &own_req_list[req_poll_offset] );
-                poll_serial_no++;
-                waiting_poll = true;
-            }
-
-            // Receive messages, participate in the polls, everything
-            // Needs to spin because we also need to Recv an unknown-sized message -
-            // better to spin than to waste another roundtrip, maybe?
-
-            auto HandleRecvlistComplete = [ &recvlist_replies_received, &waiting_responses ]( int i_recv ){
-                if( !recvlist_replies_received[i_recv] ){
-                    recvlist_replies_received[i_recv] = true;
-                    waiting_responses--;
+                for (const auto &keyval : recvlist.vpeer_refs) {
+                    const auto &loc = keyval.first;
+                    loc.toEncodedString(enc);
+                    enc += "\n";
                 }
-                else{
-                    assert(false); // how can a second mesage be sent ?
+                for (const DawRef &daw_ref : recvlist.daw_refs) {
+                    daw_ref.toEncodedString(enc);
+                    enc += "\n";
                 }
+                for (const auto &keyval : recvlist.spike_refs) {
+                    const auto &loc = keyval.first;
+                    loc.toEncodedString(enc);
+                    enc += "\n";
+                }
+
+                auto &recvlist_encoded = recvlists_encoded[other_rank];
+                AppendToVector(recvlist_encoded, enc);
+                recvlist_encoded.push_back('\0');
+            }
+
+            // dbg output encoded
+            if (config.debug_netcode) {
+                Say("Send Recvlist");
+                for (const auto &keyval : recvlists_encoded) {
+                    int other_rank = keyval.first;
+                    const auto &recvlist_encoded = keyval.second;
+                    Say("to node %d, %s", other_rank, recvlist_encoded.data());
+                }
+            }
+        }
+        // very much like Alltoallv, but communications are made with only existing connections (not the whole cartesian product)
+        // this should really shine in large amounts of nodes (hundreds? or even tens?)
+        // MPI_Graph_Neighbor* is similar, but it does not allow for automatic discovery of comm-adjacent nodes
+        auto ExchangeLists = [](const MPI_Datatype &datatype, const auto &sent_vectors_hashmap, auto &received_vectors_hashmap) {
+
+            // skip, let them communicate
+
+            const int TAG_LIST_SIZE = 1;
+            const int TAG_LIST_LIST = 0;
+            const int TAG_LIST_RECEIVED = 3;
+
+            const bool use_Ssend = false; // for the msg list, so confiramtion comes through MPI itself
+
+            // the steps are as following:
+            // each node sends send lists to the nodes it receives from
+            // and sets a "any" message sink to receive such lists from any receiver node it has to send to
+            // the message sink is also used to receive confirmation of the send lists having been received !
+            //     this is important so that all send lists are sure to not be in the air, when listening stops
+            // the process is completed by running a poll on whether all nodes have received confirmation that their send lists were accepted
+
+            // an ordered sequence of the nodes I send recvlists to
+            std::vector<int> send_seq_to_node;
+            for (auto keyval : sent_vectors_hashmap) {
+                send_seq_to_node.push_back(keyval.first);
+            }
+            int nSends = (int) send_seq_to_node.size();
+
+            const int SEND_CODE_SUCCESS = 12345678;
+
+            std::vector<MPI_Request> own_req_list;
+            // Net receiver sends its recvlists to the nodes responsible to send the data
+
+            // sends the sizes first (or more general headers, could be useful for indirect discovery too ?)
+            int req_send_list_size_offset = own_req_list.size();
+            own_req_list.insert(own_req_list.end(), nSends, MPI_REQUEST_NULL);
+
+            // may send the lists too, or send them after connections are established (through list size headers)
+            int req_send_list_offset = own_req_list.size();
+            own_req_list.insert(own_req_list.end(), nSends, MPI_REQUEST_NULL);
+
+            // and may get a confirmation from sender (or use Ssend to do this instead)
+            int req_recv_list_confirm_offset = own_req_list.size();
+            own_req_list.insert(own_req_list.end(), nSends, MPI_REQUEST_NULL);
+
+            // These keep track of what the data receiver needs to send, and which sends are done
+            std::vector<int> list_send_sizes(nSends, -1);
+            std::vector<int> recvlist_replies(nSends, -1);
+            std::vector<bool> recvlist_replies_received(nSends, false);
+            // keep a handy count of recvlist_replies_received
+            int waiting_responses = 0;
+            int waiting_responses_buffer = INT_MAX; // plus temp.storage for async polling
+
+
+            // All nodes participate in the poll, to know when the connection discovery process is done
+            int req_poll_offset = own_req_list.size();
+            own_req_list.push_back(MPI_REQUEST_NULL);
+
+
+            // Potential net sender needs to accept inbound messages from any other node
+            int req_recv_list_size_offset = own_req_list.size();
+            own_req_list.push_back(MPI_REQUEST_NULL);
+            int recv_list_size_buffer = -1;
+
+            // and has to track a dynamic, unknown number of inbound connections for the unknown-sized lists
+            std::set<int> receiving_recvlist_from;
+
+            std::map<int, MPI_Request> emergent_req_send_confirm;
+            std::map<int, MPI_Request> emergent_req_recv_list; // for all messages, due to unknown size
+            std::map<int, int> emergent_recv_list_size; // for all messages, due to unknown size
+
+
+            // for Waitsome/Testsome
+            std::vector<MPI_Status> status_buf;
+            std::vector<int> status_buf_idx;
+
+            // First, emit all messages
+
+            // what if comm buffer is full? MPI runtime should then not put more messages, just keep them pending
+            for (int i_recv = 0; i_recv < nSends; i_recv++) {
+
+                auto other_rank = send_seq_to_node[i_recv];
+                const auto &sent_list = sent_vectors_hashmap.at(other_rank);
+
+                if (sent_list.empty()) continue;
+
+                list_send_sizes[i_recv] = sent_list.size();
+
+                // Sends to the same outbound node are alwyas ordered
+                // send size msg first
+
+                MPI_Isend(&list_send_sizes[i_recv], 1, MPI_INT, other_rank, TAG_LIST_SIZE, MPI_COMM_WORLD, &own_req_list[req_send_list_size_offset + i_recv]);
+
+                if (use_Ssend) {
+                    // don't need to recv a confirmation message
+                    MPI_Issend(sent_list.data(), sent_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &own_req_list[req_send_list_offset + i_recv]);
+                } else {
+                    // recv a notifiation that the recvlist has been received
+                    MPI_Isend(sent_list.data(), sent_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &own_req_list[req_send_list_offset + i_recv]);
+
+                    MPI_Irecv(&recvlist_replies[i_recv], 1, MPI_INT, other_rank, TAG_LIST_RECEIVED, MPI_COMM_WORLD, &own_req_list[req_recv_list_confirm_offset + i_recv]);
+                }
+
+                waiting_responses++;
+            }
+
+            auto Setup_Irecv_ListSize = [&]() {
+                MPI_Irecv(&recv_list_size_buffer, 1, MPI_INT, MPI_ANY_SOURCE, TAG_LIST_SIZE, MPI_COMM_WORLD, &own_req_list[req_recv_list_size_offset]);
+            };
+            Setup_Irecv_ListSize();
+
+            // and get a random recv list too, for lists I should send to
+            // MPI_Message probe_list_msg; // one for probe
+            // int probe_ready;
+
+            // Now, wait for incoming messages
+
+            typedef std::chrono::high_resolution_clock::time_point Time;
+            typedef std::chrono::duration<double> TimeDiff_Sec;
+            Time tStart = std::chrono::high_resolution_clock::now();
+
+            Time tLastPoll = tStart;
+            auto getSecs = [](Time tEnd, Time tstart) {
+                return std::chrono::duration_cast<TimeDiff_Sec>(tEnd - tstart).count();
             };
 
+            const double POLL_PERIOD_SEC = 0.1; // TODO make dynamic
 
-            // Poll for the static requests (recvlist-sender-side plus recvlist receiver for size/header)
-            status_buf.resize( own_req_list.size() );
-            status_buf_idx.resize( own_req_list.size() );
-            int outcount;
-            int ret = 0;
+            bool done = false;
+            bool waiting_poll = false;
+            int poll_result = -1;
+            int poll_serial_no = 0;
 
-            ret = MPI_Testsome( own_req_list.size(), own_req_list.data(), &outcount, status_buf_idx.data(), status_buf.data() );
-
-            bool success = ( ret == 0 );
-            bool req_errors = ( ret == MPI_ERR_IN_STATUS );
-            bool other_error = !( success || req_errors );
-
-            if( req_errors ){
-                Say("MPI POll Req Error, check it !");
-                MPI_Abort( MPI_COMM_WORLD, 5 );
-                abort();
-            }
-            if( other_error ){
-                Say("MPI Poll Misc Error, check it !");
-                MPI_Abort( MPI_COMM_WORLD, 5 );
-                abort();
-            }
-
-            for( int idx = 0; idx < outcount; idx++ ){
-                int req_idx = status_buf_idx[idx];
-                const MPI_Status &status = status_buf[idx];
+            Say("Reqs %d %d %d %d %d %d", (int) own_req_list.size(), req_send_list_offset, req_send_list_size_offset, req_poll_offset, req_recv_list_confirm_offset, req_recv_list_size_offset);
 
 
-                Say("Req %d finished", req_idx);
+            while (!done) {
 
-                if( req_send_list_offset <= req_idx && req_idx < req_send_list_offset + nSends ){
-                    int i_recv = req_idx - req_send_list_offset;
+                // don't log this when spinning
+                // Say("Event loop start");
 
-                    Say("Send recvlist %d ( to node %d ) finished", i_recv, send_seq_to_node.at(i_recv));
+                Time tNow = std::chrono::high_resolution_clock::now();
 
-                    // send was done
+                // NB: should spin anyway, because this is a time driven event -- not impossible for all communications to complete
+                if (getSecs(tNow, tLastPoll) > POLL_PERIOD_SEC && !waiting_poll) {
+                    // start async poll
+                    Say("Start poll %d", poll_serial_no);
+                    waiting_responses_buffer = waiting_responses;
+                    MPI_Iallreduce(&waiting_responses_buffer, &poll_result, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, &own_req_list[req_poll_offset]);
+                    poll_serial_no++;
+                    waiting_poll = true;
+                }
 
-                    // if it's Ssend, send completion is as good as an expicit ack message !
-                    if( use_Ssend ){
-                        HandleRecvlistComplete(i_recv);
+                // Receive messages, participate in the polls, everything
+                // Needs to spin because we also need to Recv an unknown-sized message -
+                // better to spin than to waste another roundtrip, maybe?
+
+                auto HandleRecvlistComplete = [&recvlist_replies_received, &waiting_responses](int i_recv) {
+                    if (!recvlist_replies_received[i_recv]) {
+                        recvlist_replies_received[i_recv] = true;
+                        waiting_responses--;
+                    } else {
+                        assert(false); // how can a second mesage be sent ?
                     }
+                };
+
+
+                // Poll for the static requests (recvlist-sender-side plus recvlist receiver for size/header)
+                status_buf.resize(own_req_list.size());
+                status_buf_idx.resize(own_req_list.size());
+                int outcount;
+                int ret = 0;
+
+                ret = MPI_Testsome(own_req_list.size(), own_req_list.data(), &outcount, status_buf_idx.data(), status_buf.data());
+
+                bool success = (ret == 0);
+                bool req_errors = (ret == MPI_ERR_IN_STATUS);
+                bool other_error = !(success || req_errors);
+
+                if (req_errors) {
+                    Say("MPI POll Req Error, check it !");
+                    MPI_Abort(MPI_COMM_WORLD, 5);
+                    abort();
                 }
-                else if( req_send_list_size_offset <= req_idx && req_idx < req_send_list_size_offset + nSends ){
-                    int i_recv = req_idx - req_send_list_size_offset;
-
-                    Say("Send recvlist size %d ( to node %d ) finished", i_recv, send_seq_to_node.at(i_recv));
-
-                    // nothing meaningful to do
+                if (other_error) {
+                    Say("MPI Poll Misc Error, check it !");
+                    MPI_Abort(MPI_COMM_WORLD, 5);
+                    abort();
                 }
-                else if( req_idx == req_poll_offset ){
-                    Say("Received poll result of %d", poll_result);
-                    tLastPoll = tNow;
-                    waiting_poll = false;
 
-                    if( poll_result == 0 ){
-                        // finished, yay!!
-                        done = true;
-                        // maybe don't leave yet, just in case there is cleanup to be done in this loop
-                    }
-
-                    // otherwise, wait till next poll
-                }
-                else if( req_recv_list_confirm_offset <= req_idx && req_idx < req_recv_list_confirm_offset + nSends ){
-                    int i_recv = req_idx - req_recv_list_confirm_offset;
-
-                    int other_rank = status.MPI_SOURCE;
-                    auto should_be_other_rank = send_seq_to_node[i_recv];
-
-                    int recv_msg = recvlist_replies[i_recv] ;
-
-                    Say("Received confirmation from node %d, is %d", other_rank, recv_msg );
-
-                    assert( recv_msg == SEND_CODE_SUCCESS );
-                    assert( other_rank == should_be_other_rank );
-
-                    HandleRecvlistComplete(i_recv);
-                }
-                else if( req_idx == req_recv_list_size_offset ){
-
-                    int other_rank = status.MPI_SOURCE;
-                    int tag = status.MPI_TAG;
-
-                    int sendlist_size = recv_list_size_buffer;
-
-                    Say("Received recvlist size from %d, length %d, yag %d", other_rank, sendlist_size, tag );
-
-                    if( tag != TAG_LIST_SIZE ){
-                        assert(false);
-                    }
-
-                    if( receiving_recvlist_from.count(other_rank) ){
-                        Say("But already received from that node !!");
-                        continue;
-                        assert(false);
-                    }
+                for (int idx = 0; idx < outcount; idx++) {
+                    int req_idx = status_buf_idx[idx];
+                    const MPI_Status &status = status_buf[idx];
 
 
-                    receiving_recvlist_from.insert( other_rank );
-                    emergent_recv_list_size[other_rank] = sendlist_size;
+                    Say("Req %d finished", req_idx);
 
-                    // receive the lists too, in this phase
-                    // stay in the poll by not sending the confirmation yet
+                    if (req_send_list_offset <= req_idx && req_idx < req_send_list_offset + nSends) {
+                        int i_recv = req_idx - req_send_list_offset;
 
-                    auto Recv_Recvlist = [ &received_vectors_hashmap, &emergent_req_recv_list, &datatype ]( int other_rank, int sendlist_size ){
-                        // allocate a send list, directly
-                        // to get the received_list buffer
-                        auto &received_list = received_vectors_hashmap[other_rank];
+                        Say("Send recvlist %d ( to node %d ) finished", i_recv, send_seq_to_node.at(i_recv));
 
-                        received_list.resize(sendlist_size);
+                        // send was done
 
-                        // also emergent entries
-                        auto &req = emergent_req_recv_list[other_rank];
-
-                        MPI_Irecv( received_list.data(), received_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &req );
-
-                        Say("Receiving recvlist from %d", other_rank);
-                    };
-                    Recv_Recvlist( other_rank, sendlist_size );
-
-
-                    // Also, since the recv completed, set up the recv for the next prospective connection
-                    Setup_Irecv_ListSize();
-                }
-                else{
-                    // why??
-                    assert(false);
-                }
-            }
-
-            // But also check from the recvlist-receiver-side (schedule)
-            for( auto &keyval : emergent_req_recv_list ){
-                const auto &other_rank = keyval.first;
-                auto &req_recv_list = keyval.second;
-
-                if( req_recv_list == MPI_REQUEST_NULL ) continue; // TODO eras finished ones, somehow
-
-                int flag = 0;
-                MPI_Status status;
-
-                MPI_Test( &req_recv_list, &flag, &status);
-                if( flag ){
-                    Say("Received recvlist from %d", other_rank);
-                    // reception complete
-
-                    // and send a confirmation
-                    auto Send_Recvlist_Confirmation = [ &SEND_CODE_SUCCESS, &use_Ssend, &emergent_req_send_confirm ]( int other_rank ){
-                        if( use_Ssend ){
-                            // sender is implicitly notified
+                        // if it's Ssend, send completion is as good as an expicit ack message !
+                        if (use_Ssend) {
+                            HandleRecvlistComplete(i_recv);
                         }
-                        else{
-                            MPI_Isend( &SEND_CODE_SUCCESS, 1, MPI_INT, other_rank, TAG_LIST_RECEIVED, MPI_COMM_WORLD, &emergent_req_send_confirm[ other_rank ]);
+                    } else if (req_send_list_size_offset <= req_idx && req_idx < req_send_list_size_offset + nSends) {
+                        int i_recv = req_idx - req_send_list_size_offset;
+
+                        Say("Send recvlist size %d ( to node %d ) finished", i_recv, send_seq_to_node.at(i_recv));
+
+                        // nothing meaningful to do
+                    } else if (req_idx == req_poll_offset) {
+                        Say("Received poll result of %d", poll_result);
+                        tLastPoll = tNow;
+                        waiting_poll = false;
+
+                        if (poll_result == 0) {
+                            // finished, yay!!
+                            done = true;
+                            // maybe don't leave yet, just in case there is cleanup to be done in this loop
+                        }
+
+                        // otherwise, wait till next poll
+                    } else if (req_recv_list_confirm_offset <= req_idx && req_idx < req_recv_list_confirm_offset + nSends) {
+                        int i_recv = req_idx - req_recv_list_confirm_offset;
+
+                        int other_rank = status.MPI_SOURCE;
+                        auto should_be_other_rank = send_seq_to_node[i_recv];
+
+                        int recv_msg = recvlist_replies[i_recv];
+
+                        Say("Received confirmation from node %d, is %d", other_rank, recv_msg);
+
+                        assert(recv_msg == SEND_CODE_SUCCESS);
+                        assert(other_rank == should_be_other_rank);
+
+                        HandleRecvlistComplete(i_recv);
+                    } else if (req_idx == req_recv_list_size_offset) {
+
+                        int other_rank = status.MPI_SOURCE;
+                        int tag = status.MPI_TAG;
+
+                        int sendlist_size = recv_list_size_buffer;
+
+                        Say("Received recvlist size from %d, length %d, yag %d", other_rank, sendlist_size, tag);
+
+                        if (tag != TAG_LIST_SIZE) {
+                            assert(false);
+                        }
+
+                        if (receiving_recvlist_from.count(other_rank)) {
+                            Say("But already received from that node !!");
+                            continue;
+                            assert(false);
+                        }
+
+
+                        receiving_recvlist_from.insert(other_rank);
+                        emergent_recv_list_size[other_rank] = sendlist_size;
+
+                        // receive the lists too, in this phase
+                        // stay in the poll by not sending the confirmation yet
+
+                        auto Recv_Recvlist = [&received_vectors_hashmap, &emergent_req_recv_list, &datatype](int other_rank, int sendlist_size) {
+                            // allocate a send list, directly
+                            // to get the received_list buffer
+                            auto &received_list = received_vectors_hashmap[other_rank];
+
+                            received_list.resize(sendlist_size);
+
+                            // also emergent entries
+                            auto &req = emergent_req_recv_list[other_rank];
+
+                            MPI_Irecv(received_list.data(), received_list.size(), datatype, other_rank, TAG_LIST_LIST, MPI_COMM_WORLD, &req);
+
+                            Say("Receiving recvlist from %d", other_rank);
                         };
-                    };
-                    Send_Recvlist_Confirmation( other_rank );
-
-                    // could do something inline with received lists, perhaps a functor LATER
-                }
-                else{
-                    // not ready, pass
-                }
-            }
+                        Recv_Recvlist(other_rank, sendlist_size);
 
 
-            // perhaps yield some time CPU time/energy, in a cooperative application LATER
-
-        }
-
-        // cancel the persistent random-origin recv, and cleanup all requests
-        MPI_Cancel( &own_req_list[req_recv_list_size_offset] );
-
-        // the rest is probably not necessary because no message should be flying, still cleanup
-        MPI_Waitall( own_req_list.size(), own_req_list.data(), MPI_STATUSES_IGNORE);
-        // and emergent sends, too
-        for( auto &keyval : emergent_req_send_confirm ){
-            auto &req = keyval.second;
-            MPI_Wait( &req, MPI_STATUS_IGNORE );
-        }
-        for( auto &keyval : emergent_req_recv_list ){
-            auto &req = keyval.second;
-            MPI_Wait( &req, MPI_STATUS_IGNORE );
-        }
-
-
-        Time tEnd = std::chrono::high_resolution_clock::now();
-        Say("Finished exchanging send lists in %f sec.", getSecs( tEnd, tStart ) );
-
-        // assert(false);
-
-        // and form the mirrors
-    };
-
-    if (engine_config.use_mpi) {
-        ExchangeLists( MPI_CHAR, recvlists_encoded, sendlists_encoded );
-
-        // dbg output encoded
-        if( config.debug_netcode ){
-            Say("Received Recvlists");
-            for( const auto &keyval : sendlists_encoded ){
-                int other_rank = keyval.first;
-                const auto &recvlist_encoded = keyval.second;
-
-                Say("from node %d, %s", other_rank, recvlist_encoded.data());
-            }
-        }
-
-        // decode the recvlists
-        for( auto &keyval : sendlists_encoded ){
-
-            auto other_rank = keyval.first;
-            auto &enc = keyval.second; // newlines will be replaced with nulls to ease parsing
-
-            auto &sendlist = send_lists[other_rank];
-            assert( enc.size() );
-            // convert enc to null-terminated lines, for convenience
-            std::vector<char *> lines;
-            lines.push_back( enc.data() );
-            for( size_t i = 0; i < enc.size() ; i++ ){
-                if( enc[i] == '\n' ){
-                    enc[i] = '\0';
-                    if( i + 1 < enc.size() ) lines.push_back( enc.data() + i + 1 );
-                }
-            }
-
-            if( config.debug_netcode ){
-            Say("Lines: %zd", lines.size() );
-            for( int i = 0; i < (int)lines.size() ; i++ ){
-                Say("%d:\t%s", i, lines[i]);
-                Say("end-----\n\n");
-            }
-            }
-
-            Int vpeers, daws, spikes;
-            sscanf(lines[0], "%ld %ld %ld", &vpeers, &daws, &spikes );
-            if( config.debug_netcode ){
-                Say("%ld %ld %ld <- %s", vpeers, daws, spikes, lines[0]);
-            }
-            Int vpeer_idx = 1;
-            Int daw_idx = vpeer_idx + vpeers;
-            Int spike_idx = daw_idx + daws;
-
-
-            sendlist.vpeer_sources.resize(vpeers);
-            for(int i = 0; i < vpeers; i++){
-                auto ret = sendlist.vpeer_sources[i].fromEncodedString( lines[ vpeer_idx + i ] );
-                if(!ret) Say( "fail %s", lines[ vpeer_idx + i ] );
-                assert(ret);
-            }
-            sendlist.daw_refs.resize(daws);
-            for(int i = 0; i < daws; i++){
-                auto ret = sendlist.daw_refs[i].fromEncodedString( lines[ daw_idx + i ] );
-                if(!ret) Say( "fail %s", lines[ daw_idx + i ] );
-                assert(ret);
-            }
-            sendlist.spike_sources.resize(spikes);
-            for(int i = 0; i < spikes; i++){
-                auto ret = sendlist.spike_sources[i].fromEncodedString( lines[ spike_idx + i ] );
-                if(!ret) Say( "fail %s", lines[ spike_idx + i ] );
-                assert(ret);
-            }
-        }
-
-        // dbg output encoded symbolic
-        if( config.debug_netcode ){
-        Say("Send");
-        for( const auto &keyval : send_lists ){
-            Say("to node %d:", keyval.first);
-
-            const auto &send_list = keyval.second;
-            for( const auto &loc : send_list.vpeer_sources ){
-                std::string say_refs = "\tVpeer " + loc.toPresentableString() ;
-                Say("%s", say_refs.c_str());
-            }
-
-            for( const auto &loc : send_list.spike_sources ){
-                std::string say_refs = "\tSpikes " + loc.toPresentableString() ;
-                Say("%s", say_refs.c_str());
-            }
-
-            for( const auto &daw : send_list.daw_refs ){
-                std::string say_refs = "\tDaw " + daw.toPresentableString() ;
-                Say("%s", say_refs.c_str());
-            }
-        }
-        }
-
-        // now construct the send and recv mirrors, and remap
-
-        // construct and remap for send_lists
-        for( const auto &keyval : send_lists ){
-            auto other_rank = keyval.first;
-            const auto &send_list = keyval.second;
-
-            auto &send_list_impl = engine_config.sendlist_impls[other_rank];
-
-            send_list_impl.vpeer_positions_in_globstate.resize( send_list.vpeer_sources.size() );
-            for( size_t i = 0; i < send_list.vpeer_sources.size() ; i++ ){
-                const auto &loc = send_list.vpeer_sources.at(i);
-                send_list_impl.vpeer_positions_in_globstate[i] = GetCompartmentVoltageStatevarIndex_Global( loc );
-            }
-
-            send_list_impl.daw_columns.resize( send_list.daw_refs.size() );
-            // also realize any data logger columns that access values local to this node
-            for( size_t i = 0; i < send_list.daw_refs.size() ; i++ ){
-                const auto &ref = send_list.daw_refs.at(i);
-
-                // NB make sure this node knows about this daw
-                const auto &daw = sim.data_writers.get(ref.daw_seq);
-                const auto &col = daw.output_columns.get(ref.col_seq);
-                const auto &path = col.quantity;
-
-                auto &impl_col = send_list_impl.daw_columns[i];
-
-                if( !Implement_LoggerColumn( ref.daw_seq, ref.col_seq, daw.fileName, path, impl_col) ) return false;
-            }
-
-            // allocate mirror buffers for spike triggers
-            send_list_impl.spike_mirror_buffer = tabs.global_tables_state_i64_arrays.size();
-            tabs.                                     global_tables_state_i64_arrays.emplace_back();
-            auto &tab = tabs.                         global_tables_state_i64_arrays.back();
-            // TODO pack the boolean vectors
-            tab.resize( send_list.spike_sources.size(), 0);
-            // and add extra notification entries to the spike sources
-            for( size_t i = 0; i < send_list.spike_sources.size() ; i++ ){
-                const auto &loc = send_list.spike_sources.at(i);
-
-                size_t global_idx_T_spiker;
-                if( !GetCompartmentSpikerImplementation_Global( loc, global_idx_T_spiker) ) return false;
-                auto packed_id = GetEncodedTableEntryId( send_list_impl.spike_mirror_buffer, i );
-
-                tabs.global_tables_const_i64_arrays[global_idx_T_spiker].push_back( packed_id );
-            }
-        }
-        // The final send buffer for these will be allocated at run time
-
-        // construct and remap for recv_lists
-        for( const auto &keyval : recv_lists ){
-            auto other_rank = keyval.first;
-            const auto &recv_list = keyval.second;
-
-            auto &recv_list_impl = engine_config.recvlist_impls[other_rank];
-
-            // allocate mirror buffers for values continuously being sent
-            recv_list_impl.value_mirror_size = recv_list.vpeer_refs.size() + recv_list.daw_refs.size();
-            recv_list_impl.value_mirror_buffer = tabs.global_tables_state_f32_arrays.size();
-            tabs.                                     global_tables_state_f32_arrays.emplace_back();
-            auto &value_mirror = tabs.                global_tables_state_f32_arrays.back();
-            value_mirror.resize( recv_list_impl.value_mirror_size, 5555); // XXX set as NAN after debug
-            for( int i = recv_list.vpeer_refs.size(); i < (int)value_mirror.size(); i++ ) value_mirror[i] = 4444;
-            // NB walk through these requested values, in the same order they were requested in the recv list
-            long long value_mirror_table = recv_list_impl.value_mirror_buffer;
-            int value_mirror_entry = 0;
-            for( const auto &keyval : recv_list.vpeer_refs ){
-                const auto & remap_ref_list = keyval.second;
-
-                for( TabEntryRef_Packed ref_packed : remap_ref_list ){
-                    TabEntryRef ref = GetDecodedTableEntryId(ref_packed);
-                    TabEntryRef_Packed remapped_ref = GetEncodedTableEntryId( value_mirror_table, value_mirror_entry );
-                    // printf("reff %llx -> %lld %d -> %llx, %zx %zx\n", ref_packed, ref.table, ref.entry, remapped_ref, tabs.global_tables_const_i64_arrays.size() , tabs.global_tables_const_i64_arrays[ref.table].size());
-                    tabs.global_tables_const_i64_arrays[ref.table][ref.entry] = remapped_ref;
+                        // Also, since the recv completed, set up the recv for the next prospective connection
+                        Setup_Irecv_ListSize();
+                    } else {
+                        // why??
+                        assert(false);
+                    }
                 }
 
-                value_mirror_entry++;
+                // But also check from the recvlist-receiver-side (schedule)
+                for (auto &keyval : emergent_req_recv_list) {
+                    const auto &other_rank = keyval.first;
+                    auto &req_recv_list = keyval.second;
+
+                    if (req_recv_list == MPI_REQUEST_NULL) continue; // TODO eras finished ones, somehow
+
+                    int flag = 0;
+                    MPI_Status status;
+
+                    MPI_Test(&req_recv_list, &flag, &status);
+                    if (flag) {
+                        Say("Received recvlist from %d", other_rank);
+                        // reception complete
+
+                        // and send a confirmation
+                        auto Send_Recvlist_Confirmation = [&SEND_CODE_SUCCESS, &use_Ssend, &emergent_req_send_confirm](int other_rank) {
+                            if (use_Ssend) {
+                                // sender is implicitly notified
+                            } else {
+                                MPI_Isend(&SEND_CODE_SUCCESS, 1, MPI_INT, other_rank, TAG_LIST_RECEIVED, MPI_COMM_WORLD, &emergent_req_send_confirm[other_rank]);
+                            };
+                        };
+                        Send_Recvlist_Confirmation(other_rank);
+
+                        // could do something inline with received lists, perhaps a functor LATER
+                    } else {
+                        // not ready, pass
+                    }
+                }
+
+
+                // perhaps yield some time CPU time/energy, in a cooperative application LATER
+
+            }
+
+            // cancel the persistent random-origin recv, and cleanup all requests
+            MPI_Cancel(&own_req_list[req_recv_list_size_offset]);
+
+            // the rest is probably not necessary because no message should be flying, still cleanup
+            MPI_Waitall(own_req_list.size(), own_req_list.data(), MPI_STATUSES_IGNORE);
+            // and emergent sends, too
+            for (auto &keyval : emergent_req_send_confirm) {
+                auto &req = keyval.second;
+                MPI_Wait(&req, MPI_STATUS_IGNORE);
+            }
+            for (auto &keyval : emergent_req_recv_list) {
+                auto &req = keyval.second;
+                MPI_Wait(&req, MPI_STATUS_IGNORE);
             }
 
 
-            // right next, the daw values
-            for( const auto &daw_ref : recv_list.daw_refs ){
+            Time tEnd = std::chrono::high_resolution_clock::now();
+            Say("Finished exchanging send lists in %f sec.", getSecs(tEnd, tStart));
 
-                assert(engine_config.my_mpi.rank == 0);
+            // assert(false);
 
-                engine_config.trajectory_loggers[daw_ref.daw_seq].columns[daw_ref.col_seq].entry = value_mirror_entry;
+            // and form the mirrors
+        };
 
-                value_mirror_entry++;
+        if (engine_config.use_mpi) {
+            ExchangeLists(MPI_CHAR, recvlists_encoded, sendlists_encoded);
+
+            // dbg output encoded
+            if (config.debug_netcode) {
+                Say("Received Recvlists");
+                for (const auto &keyval : sendlists_encoded) {
+                    int other_rank = keyval.first;
+                    const auto &recvlist_encoded = keyval.second;
+
+                    Say("from node %d, %s", other_rank, recvlist_encoded.data());
+                }
             }
 
-            // and also track where the spikes should be sent to
-            int spike_mirror_entry = 0;
-            recv_list_impl.spike_destinations.resize( recv_list.spike_refs.size() );
-            for( const auto &keyval : recv_list.spike_refs ){
-                const auto &ref_list = keyval.second;
+            // decode the recvlists
+            for (auto &keyval : sendlists_encoded) {
 
-                recv_list_impl.spike_destinations[spike_mirror_entry] = ref_list;
+                auto other_rank = keyval.first;
+                auto &enc = keyval.second; // newlines will be replaced with nulls to ease parsing
 
-                spike_mirror_entry++;
+                auto &sendlist = send_lists[other_rank];
+                assert(enc.size());
+                // convert enc to null-terminated lines, for convenience
+                std::vector<char *> lines;
+                lines.push_back(enc.data());
+                for (size_t i = 0; i < enc.size(); i++) {
+                    if (enc[i] == '\n') {
+                        enc[i] = '\0';
+                        if (i + 1 < enc.size()) lines.push_back(enc.data() + i + 1);
+                    }
+                }
+
+                if (config.debug_netcode) {
+                    Say("Lines: %zd", lines.size());
+                    for (int i = 0; i < (int) lines.size(); i++) {
+                        Say("%d:\t%s", i, lines[i]);
+                        Say("end-----\n\n");
+                    }
+                }
+
+                Int vpeers, daws, spikes;
+                sscanf(lines[0], "%ld %ld %ld", &vpeers, &daws, &spikes);
+                if (config.debug_netcode) {
+                    Say("%ld %ld %ld <- %s", vpeers, daws, spikes, lines[0]);
+                }
+                Int vpeer_idx = 1;
+                Int daw_idx = vpeer_idx + vpeers;
+                Int spike_idx = daw_idx + daws;
+
+
+                sendlist.vpeer_sources.resize(vpeers);
+                for (int i = 0; i < vpeers; i++) {
+                    auto ret = sendlist.vpeer_sources[i].fromEncodedString(lines[vpeer_idx + i]);
+                    if (!ret) Say("fail %s", lines[vpeer_idx + i]);
+                    assert(ret);
+                }
+                sendlist.daw_refs.resize(daws);
+                for (int i = 0; i < daws; i++) {
+                    auto ret = sendlist.daw_refs[i].fromEncodedString(lines[daw_idx + i]);
+                    if (!ret) Say("fail %s", lines[daw_idx + i]);
+                    assert(ret);
+                }
+                sendlist.spike_sources.resize(spikes);
+                for (int i = 0; i < spikes; i++) {
+                    auto ret = sendlist.spike_sources[i].fromEncodedString(lines[spike_idx + i]);
+                    if (!ret) Say("fail %s", lines[spike_idx + i]);
+                    assert(ret);
+                }
+            }
+
+            // dbg output encoded symbolic
+            if (config.debug_netcode) {
+                Say("Send");
+                for (const auto &keyval : send_lists) {
+                    Say("to node %d:", keyval.first);
+
+                    const auto &send_list = keyval.second;
+                    for (const auto &loc : send_list.vpeer_sources) {
+                        std::string say_refs = "\tVpeer " + loc.toPresentableString();
+                        Say("%s", say_refs.c_str());
+                    }
+
+                    for (const auto &loc : send_list.spike_sources) {
+                        std::string say_refs = "\tSpikes " + loc.toPresentableString();
+                        Say("%s", say_refs.c_str());
+                    }
+
+                    for (const auto &daw : send_list.daw_refs) {
+                        std::string say_refs = "\tDaw " + daw.toPresentableString();
+                        Say("%s", say_refs.c_str());
+                    }
+                }
+            }
+
+            // now construct the send and recv mirrors, and remap
+
+            // construct and remap for send_lists
+            for (const auto &keyval : send_lists) {
+                auto other_rank = keyval.first;
+                const auto &send_list = keyval.second;
+
+                auto &send_list_impl = engine_config.sendlist_impls[other_rank];
+
+                send_list_impl.vpeer_positions_in_globstate.resize(send_list.vpeer_sources.size());
+                for (size_t i = 0; i < send_list.vpeer_sources.size(); i++) {
+                    const auto &loc = send_list.vpeer_sources.at(i);
+                    send_list_impl.vpeer_positions_in_globstate[i] = GetCompartmentVoltageStatevarIndex_Global(loc);
+                }
+
+                send_list_impl.daw_columns.resize(send_list.daw_refs.size());
+                // also realize any data logger columns that access values local to this node
+                for (size_t i = 0; i < send_list.daw_refs.size(); i++) {
+                    const auto &ref = send_list.daw_refs.at(i);
+
+                    // NB make sure this node knows about this daw
+                    const auto &daw = sim.data_writers.get(ref.daw_seq);
+                    const auto &col = daw.output_columns.get(ref.col_seq);
+                    const auto &path = col.quantity;
+
+                    auto &impl_col = send_list_impl.daw_columns[i];
+
+                    if (!Implement_LoggerColumn(ref.daw_seq, ref.col_seq, daw.fileName, path, impl_col)) return false;
+                }
+
+                // allocate mirror buffers for spike triggers
+                send_list_impl.spike_mirror_buffer = tabs.global_tables_state_i64_arrays.size();
+                tabs.global_tables_state_i64_arrays.emplace_back();
+                auto &tab = tabs.global_tables_state_i64_arrays.back();
+                // TODO pack the boolean vectors
+                tab.resize(send_list.spike_sources.size(), 0);
+                // and add extra notification entries to the spike sources
+                for (size_t i = 0; i < send_list.spike_sources.size(); i++) {
+                    const auto &loc = send_list.spike_sources.at(i);
+
+                    size_t global_idx_T_spiker;
+                    if (!GetCompartmentSpikerImplementation_Global(loc, global_idx_T_spiker)) return false;
+                    auto packed_id = GetEncodedTableEntryId(send_list_impl.spike_mirror_buffer, i);
+
+                    tabs.global_tables_const_i64_arrays[global_idx_T_spiker].push_back(packed_id);
+                }
+            }
+            // The final send buffer for these will be allocated at run time
+
+            // construct and remap for recv_lists
+            for (const auto &keyval : recv_lists) {
+                auto other_rank = keyval.first;
+                const auto &recv_list = keyval.second;
+
+                auto &recv_list_impl = engine_config.recvlist_impls[other_rank];
+
+                // allocate mirror buffers for values continuously being sent
+                recv_list_impl.value_mirror_size = recv_list.vpeer_refs.size() + recv_list.daw_refs.size();
+                recv_list_impl.value_mirror_buffer = tabs.global_tables_state_f32_arrays.size();
+                tabs.global_tables_state_f32_arrays.emplace_back();
+                auto &value_mirror = tabs.global_tables_state_f32_arrays.back();
+                value_mirror.resize(recv_list_impl.value_mirror_size, 5555); // XXX set as NAN after debug
+                for (int i = recv_list.vpeer_refs.size(); i < (int) value_mirror.size(); i++) value_mirror[i] = 4444;
+                // NB walk through these requested values, in the same order they were requested in the recv list
+                long long value_mirror_table = recv_list_impl.value_mirror_buffer;
+                int value_mirror_entry = 0;
+                for (const auto &keyval : recv_list.vpeer_refs) {
+                    const auto &remap_ref_list = keyval.second;
+
+                    for (TabEntryRef_Packed ref_packed : remap_ref_list) {
+                        TabEntryRef ref = GetDecodedTableEntryId(ref_packed);
+                        TabEntryRef_Packed remapped_ref = GetEncodedTableEntryId(value_mirror_table, value_mirror_entry);
+                        // printf("reff %llx -> %lld %d -> %llx, %zx %zx\n", ref_packed, ref.table, ref.entry, remapped_ref, tabs.global_tables_const_i64_arrays.size() , tabs.global_tables_const_i64_arrays[ref.table].size());
+                        tabs.global_tables_const_i64_arrays[ref.table][ref.entry] = remapped_ref;
+                    }
+
+                    value_mirror_entry++;
+                }
+
+
+                // right next, the daw values
+                for (const auto &daw_ref : recv_list.daw_refs) {
+
+                    assert(engine_config.my_mpi.rank == 0);
+
+                    engine_config.trajectory_loggers[daw_ref.daw_seq].columns[daw_ref.col_seq].entry = value_mirror_entry;
+
+                    value_mirror_entry++;
+                }
+
+                // and also track where the spikes should be sent to
+                int spike_mirror_entry = 0;
+                recv_list_impl.spike_destinations.resize(recv_list.spike_refs.size());
+                for (const auto &keyval : recv_list.spike_refs) {
+                    const auto &ref_list = keyval.second;
+
+                    recv_list_impl.spike_destinations[spike_mirror_entry] = ref_list;
+
+                    spike_mirror_entry++;
+                }
             }
         }
+#endif
     }
 
-    // MPI_Finalize();
-    // exit(1);
-#endif
     // some final info
-
     engine_config.work_items = tabs.callbacks.size(); // kind of obvious in hindsight
     engine_config.t_initial = 0; // might change LATER
     engine_config.t_final = engine_config.t_initial + sim.length;
     engine_config.dt = sim.step;
 
-
+    //Creation of the consecutive kernels for GPU and SIMD(future) support
     tabs.create_consecutive_kernels_vector(config.skip_combining_consecutive_kernels);
 
     // yay!
-    printf("instantiation complete!\n");
+    log(LOG_INFO) << "Create_consecutive_kernels_vector : reduced " << (long long)tabs.callbacks.size() << " callbacks to " << (long long)tabs.consecutive_kernels.size() <<  " consecutive kernels\n";
+    log(LOG_INFO) << "Instantiation complete!" << LOG_ENDL;
 
+    //return code
     return true;
 }

@@ -2,12 +2,38 @@
 // Created by max on 12-10-21.
 //
 
+//const float     * m_gpu_constants               = A vector holding all read-only parameters of the work items (ion channel G_max, compartment capacitance/resistance/area ...)
+//const float     * m_gpu_state_now               = A vector holding all scalar state variables of the work items (voltages, gates, ions, and more)
+//float     * m_gpu_state_next              = Same as above, to be written for the new timestep
+//
+//const Table_F32 * m_gpu_tables_const_f32_arrays = A vector holding the beginnings of all const float32 vectors of the work items (synapse G_max, tau)
+//const Table_I64 * m_gpu_tables_const_i64_arrays = A vector holding the beginnings of all const int64 vectors of the work items (location of remote voltage for gap junctions, location of remote trigger for spiking synapses)
+//const Table_F32 * m_gpu_tables_stateNow_f32     = A vector holding the beginnings of all state float32 vectors of the work items (synapse G_now)
+//Table_I64 * m_gpu_tables_stateNow_i64     = A vector holding the beginnings of all state float32 vectors of the work items (triggers of spiking synapses, which are overwritten by other work items)
+//Note!     m_gpu_tables_stateNow_i64 is not const even though it is stateNow, because triggers are cleared by the work items in stateNow so that they can be concurrently modified by other work items in stateNext
+//        Table_F32 * m_gpu_tables_stateNext_f32    = A vector holding the beginnings of updated state float32 vectors of the work items
+//        Table_I64 * m_gpu_tables_stateNext_i64    = A vector holding the beginnings of updated state int64 vectors of the work items
+//long long     * m_gpu_tables_const_f32_sizes  = The size of the vector pointed to by the table
+//long long     * m_gpu_tables_const_i64_sizes  = The size of the vector pointed to by the table
+//long long     * m_gpu_tables_state_f32_sizes  = The size of the vector pointed to by the table
+//long long     * m_gpu_tables_state_i64_sizes  = The size of the vector pointed to by the table
+//
+//        These lists have as many elements as there are work items.
+//long long int * m_gpu_const_f32_index         =  Start of the const f32 scalars assigned to work item i
+//long long int * m_gpu_state_f32_index         =  Start of the state f32 scalars assigned to work item i
+//long long int * m_gpu_table_const_f32_index   =  Start of the const f32 vectors assigned to work item i
+//long long int * m_gpu_table_const_i64_index   =  Start of the const i64 vectors assigned to work item i
+//long long int * m_gpu_table_state_f32_index   =  Start of the state f32 scalars assigned to work item i
+//long long int * m_gpu_table_state_i64_index   =  Start of the state i64 scalars assigned to work item i
+
+//-->
+//work item 33 has 4 const_f32_arrays, then they are tables_const_f32_arrays[table_const_f32_index[33] ... index + 4 - 1] and the sizes are tables_const_f32_sizes[table_const_f32_index[33] ... index + 4 - 1]
+
 #ifndef EDEN_CPU_CPUBACKEND_H
 #define EDEN_CPU_CPUBACKEND_H
 
 #include <cstring>
-#include "../../AbstractBackend.h"
-
+#include "eden/backends/AbstractBackend.h"
 
 class CpuBackend : public AbstractBackend {
     using AbstractBackend::AbstractBackend;
@@ -27,6 +53,8 @@ public:
         m_print_tables_stateNow_f32      = state->global_tables_statePrint_f32_arrays.data();
 
         m_global_state_now               = state->state_one.data();
+
+
         m_global_state_next              = state->state_two.data();
         m_global_tables_stateNow_f32     = state->global_tables_stateOne_f32_arrays.data();
         m_global_tables_stateNow_i64     = state->global_tables_stateOne_i64_arrays.data();

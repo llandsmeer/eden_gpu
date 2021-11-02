@@ -1,8 +1,12 @@
+/*
+ * general options for the simulator
+ *
+ */
+
 #ifndef EDEN_SIMULATOR_CONFIG
 #define EDEN_SIMULATOR_CONFIG
 
 extern "C" {
-// general options for the simulator
 struct SimulatorConfig{
 	
 	bool override_random_seed;
@@ -54,5 +58,6 @@ struct SimulatorConfig{
 	}
 };
 }
+
 
 #endif

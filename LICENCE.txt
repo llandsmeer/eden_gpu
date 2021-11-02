@@ -1,4 +1,4 @@
-Copyright Sotirios Panagiotou, National Technical University of Athens, Erasmus University Medical Centre Rotterdam.
+Copyright Erasmus University Medical Centre Rotterdam.
 
 This Copyright and License refers to all files in this distribution that do not have an explicit Copyright notice.
 

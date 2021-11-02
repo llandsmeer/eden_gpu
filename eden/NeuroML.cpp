@@ -7031,25 +7031,27 @@ struct ImportState{
 };
 
 //Top-level NeuroML import routine
-bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simulation, FILE *info_log, FILE *error_log){
+bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simulation, LogContext& logC, FILE *info_log, FILE *error_log){
+    //--> Descirption
+    /* On required parse ordering:
+    Cell is defined by two properties: Morphology and Biophysical. Both are required and unique in the Cell.
+    Morphology explicitly specifies the 3D structure of the neuron. It is self-contained, requiring no references to other model parts.
+    Biophysical property definitions may refer to specific points on the Morphology on which they are applicable g. soma only).
+    Thus Morphology has to be known before interpreting that cell's Biophysical contents.
+    At the same time, Morphologies, Biophysics, Channels etc. can be specified outside a particular Cell.
+    The suggested order elements should appear in a NeuroML file ensures
+    single files can be fully interpreted in a single-pass parse,
+    although the ordering could stop holding when includes are put in the mix.
 
-	bool ok = false;
-	fprintf(info_log, "Starting import from NeuroML file %s\n", top_level_filename);
-	
-	/* On required parse ordering:
-	Cell is defined by two properties: Morphology and Biophysical. Both are required and unique in the Cell.
-	Morphology explicitly specifies the 3D structure of the neuron. It is self-contained, requiring no references to other model parts.
-	Biophysical property definitions may refer to specific points on the Morphology on which they are applicable g. soma only).
-	Thus Morphology has to be known before interpreting that cell's Biophysical contents.
-	At the same time, Morphologies, Biophysics, Channels etc. can be specified outside a particular Cell.
-	The suggested order elements should appear in a NeuroML file ensures
-	single files can be fully interpreted in a single-pass parse,
-	although the ordering could stop holding when includes are put in the mix.
-	
-	Named(aka Standalone) entities shold be known across all files.
-		(theoretically each file should know its include subtree, but this is both easier to code and laxer->more convenient)
-	*/
-	
+    Named(aka Standalone) entities shold be known across all files.
+        (theoretically each file should know its include subtree, but this is both easier to code and laxer->more convenient)
+    */
+
+    bool ok = false;
+    miniLogger logN(LOG_DEFAULT,std::cout,&logC.log_file, __FUNCTION__,logC.mpi_rank);
+    logN(LOG_INFO) << "Starting import from NeuroML file " << top_level_filename << LOG_ENDL;
+    logN(LOG_WARN) << "SOME PrINt To CLEAN STILL FROM HERE ON >>>> " << LOG_ENDL;
+
 	// all sorts of core NeuroML inputs
 	static const char * known_input_types[] = {
 		"pulseGenerator",
@@ -7624,6 +7626,8 @@ bool ReadNeuroML(const char *top_level_filename, Model &model, bool entire_simul
 
 	CLEANUP:
 	//all handled automatically, actually
-	
+
+    logN(LOG_WARN) << " <<<<< TIL HERE " << LOG_ENDL;
+
 	return ok;
 }

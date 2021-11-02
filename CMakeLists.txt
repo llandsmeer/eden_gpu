@@ -1,17 +1,20 @@
+# TODO
+#   -- add docker build
+#   -- add test cases
+#   -- add help support
+#   -- check the following:
+#              -- include(CheckIPOSupported)
+#              -- check_ipo_supported(RESULT supported OUTPUT error)
+#              -- add_executable(example Example.cpp)
+#              -- if( supported )
+#              --     message(STATUS "IPO / LTO enabled")
+#              --     set_property(TARGET example PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+#              -- else()
+#              --     message(STATUS "IPO / LTO not supported: <${error}>")
+#              -- endif()
+
 cmake_minimum_required(VERSION 3.12)
 include(CMakeDependentOption)
-
-# Fixed..
-
-#include(CheckIPOSupported)
-#check_ipo_supported(RESULT supported OUTPUT error)
-#add_executable(example Example.cpp)
-#if( supported )
-#    message(STATUS "IPO / LTO enabled")
-#    set_property(TARGET example PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-#else()
-#    message(STATUS "IPO / LTO not supported: <${error}>")
-#endif()
 
 project(simHH LANGUAGES CUDA CXX C)
 find_package(OpenMP REQUIRED)
@@ -66,7 +69,6 @@ endif(CUDA_FOUND)
 
 # <---
 # ---> MPI resources to build with MPI communication if applicable.
-
 if(USE_MPI)
     find_package(MPI)
     if(MPI_FOUND)
@@ -108,7 +110,7 @@ if(USE_MPI)
 
     #    add sources here:
         set(MPI_SOURCES_LIB
-
+                eden/Mpi_helpers.cpp
                 )
     else ()
         message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
@@ -140,10 +142,7 @@ target_link_libraries(eden PRIVATE cJSON pugixml ${CMAKE_DL_LIBS} ${MPI_CXX_LIB}
 if(CUDA_FOUND)
     set_target_properties(eden PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     target_compile_options(eden PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-            -G
-            -lineinfo
             --use_fast_math
-            --relocatable-device-code=true
             >)
 endif(CUDA_FOUND)
 
@@ -153,5 +152,6 @@ if(MPI_FOUND)
     target_link_libraries(eden PRIVATE ${MPI_CUDA_LIBRARIES})
 endif(MPI_FOUND)
 
+# que ??
 install(TARGETS eden 
     TYPE RUNTIME)
