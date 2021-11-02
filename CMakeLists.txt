@@ -110,7 +110,7 @@ endif(CUDA_FOUND)
 
     #    add sources here:
         set(MPI_SOURCES_LIB
-
+                eden/Mpi_helpers.cpp
                 )
     else ()
         message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
