@@ -1,17 +1,20 @@
+# TODO
+#   -- add docker build
+#   -- add test cases
+#   -- add help support
+#   -- check the following:
+#              -- include(CheckIPOSupported)
+#              -- check_ipo_supported(RESULT supported OUTPUT error)
+#              -- add_executable(example Example.cpp)
+#              -- if( supported )
+#              --     message(STATUS "IPO / LTO enabled")
+#              --     set_property(TARGET example PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+#              -- else()
+#              --     message(STATUS "IPO / LTO not supported: <${error}>")
+#              -- endif()
+
 cmake_minimum_required(VERSION 3.12)
 include(CMakeDependentOption)
-
-# Fixed..
-
-#include(CheckIPOSupported)
-#check_ipo_supported(RESULT supported OUTPUT error)
-#add_executable(example Example.cpp)
-#if( supported )
-#    message(STATUS "IPO / LTO enabled")
-#    set_property(TARGET example PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-#else()
-#    message(STATUS "IPO / LTO not supported: <${error}>")
-#endif()
 
 project(simHH LANGUAGES CUDA CXX C)
 find_package(OpenMP REQUIRED)
@@ -66,8 +69,7 @@ endif(CUDA_FOUND)
 
 # <---
 # ---> MPI resources to build with MPI communication if applicable.
-
-#if(USE_MPI)
+if(USE_MPI)
     find_package(MPI)
     if(MPI_FOUND)
         message("STATUS [Eden] MPI enabled")
@@ -113,7 +115,7 @@ endif(CUDA_FOUND)
     else ()
         message(STATUS "[Eden] Could not find MPI support. Disabling MPI sources.")
     endif(MPI_FOUND)
-#endif()
+endif()
 # <---
 
 if(MPI_FOUND)
@@ -150,5 +152,6 @@ if(MPI_FOUND)
     target_link_libraries(eden PRIVATE ${MPI_CUDA_LIBRARIES})
 endif(MPI_FOUND)
 
+# que ??
 install(TARGETS eden 
     TYPE RUNTIME)
